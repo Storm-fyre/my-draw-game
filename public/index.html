@@ -19,9 +19,9 @@
       color: white;
     }
 
-    /* Hide the game container until nickname is provided */
+    /* Hide game container until user enters nickname */
     #gameContainer {
-      display: none; /* Initially hidden */
+      display: none;
       height: calc(100vh - 50px);
     }
     .flexRow {
@@ -105,14 +105,17 @@
       margin-top: 5px;
     }
 
-    /* Decision and Drawing Buttons */
-    #decisionButtons, #drawingTools {
+    /* Buttons */
+    #decisionButtons,
+    #drawingTools {
       display: flex;
-      justify-content: center;
+      align-items: center;
       gap: 10px;
       margin-bottom: 10px;
+      justify-content: center;
     }
-    #decisionButtons button, #drawingTools button {
+    #decisionButtons button,
+    #drawingTools button {
       background: #ff66cc;
       border: none;
       padding: 8px 16px;
@@ -122,11 +125,20 @@
       cursor: pointer;
       transition: background 0.2s ease;
     }
-    #decisionButtons button:hover, #drawingTools button:hover {
+    #decisionButtons button:hover,
+    #drawingTools button:hover {
       background: #fa49bd;
     }
 
-    /* Canvas */
+    /* Toolbox select style */
+    select {
+      padding: 5px;
+      border-radius: 4px;
+      border: 2px solid #ccc;
+      font-size: 0.9em;
+      cursor: pointer;
+    }
+
     #canvasContainer {
       flex: 1;
       display: flex;
@@ -137,7 +149,7 @@
       border: 2px dashed #ff66cc;
       background-color: #fff;
       border-radius: 8px;
-      cursor: crosshair;
+      touch-action: none; /* For touch devices */
     }
 
     /* Players List */
@@ -207,7 +219,7 @@
 <body>
   <div id="topBar">Draw Game: Colorful Edition</div>
 
-  <!-- Nickname Prompt (shown first) -->
+  <!-- Nickname Prompt -->
   <div id="nicknamePrompt">
     <div id="nicknamePromptContent">
       <h2>Welcome! Please enter your nickname:</h2>
@@ -216,27 +228,59 @@
     </div>
   </div>
 
-  <!-- Main Game Container (hidden until join) -->
+  <!-- Main Game Container -->
   <div id="gameContainer" class="flexRow">
     <div id="leftPanel">
       <div id="turnInfo">Waiting for players...</div>
 
-      <!-- Countdown Bar and Number -->
+      <!-- Countdown -->
       <div id="countdownBar" style="display:none;">
         <div id="countdownFill"></div>
       </div>
       <div id="countdownNumber" style="display:none;">0</div>
 
       <!-- Decision Buttons -->
-      <div id="decisionButtons" style="display: none;">
+      <div id="decisionButtons" style="display:none;">
         <button id="drawBtn">Draw</button>
         <button id="skipBtn">Skip</button>
       </div>
 
       <!-- Drawing Tools -->
-      <div id="drawingTools" style="display: none;">
+      <div id="drawingTools" style="display:none;">
+        <!-- Color/Thickness Toolbox -->
+        <select id="colorSelect">
+          <option value="#000000">Black</option>
+          <option value="#ffffff">White</option>
+          <option value="#ff0000">Red</option>
+          <option value="#00ff00">Green</option>
+          <option value="#0000ff">Blue</option>
+          <option value="#ffff00">Yellow</option>
+          <option value="#ffa500">Orange</option>
+          <option value="#800080">Purple</option>
+          <option value="#00ffff">Cyan</option>
+          <option value="#ff00ff">Magenta</option>
+          <option value="#808080">Gray</option>
+          <option value="#8B4513">Brown</option>
+          <option value="#FFC0CB">Pink</option>
+          <option value="#000080">Navy</option>
+          <option value="#008080">Teal</option>
+          <option value="#FFD700">Gold</option>
+          <option value="#C0C0C0">Silver</option>
+          <option value="#A52A2A">Maroon</option>
+        </select>
+
+        <select id="thicknessSelect">
+          <option value="1">1px</option>
+          <option value="2">2px</option>
+          <option value="4">4px</option>
+          <option value="6">6px</option>
+          <option value="8">8px</option>
+          <option value="10">10px</option>
+        </select>
+
         <button id="undoBtn">Undo</button>
         <button id="clearBtn">Clear</button>
+        <button id="giveUpBtn">Give Up</button>
       </div>
 
       <div id="canvasContainer">
@@ -246,7 +290,6 @@
 
     <div id="rightPanel">
       <div id="playersList"></div>
-
       <div id="chatBox"></div>
       <div id="chatInputSection">
         <input id="chatInput" placeholder="Say something nice..." />
@@ -255,9 +298,9 @@
     </div>
   </div>
 
-  <!-- Socket.IO client -->
+  <!-- Socket.IO -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Client Logic -->
+  <!-- Client Script -->
   <script src="client.js"></script>
 </body>
 </html>

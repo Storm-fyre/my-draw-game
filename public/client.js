@@ -1,12 +1,12 @@
 // client.js
 const socket = io();
 
-// UI references
+// DOM
 let nicknamePrompt, nicknameInput, joinBtn;
 let gameContainer;
 let turnInfo, countdownBar, countdownFill, countdownNumber;
 let decisionButtons, drawBtn, skipBtn;
-let drawingTools, undoBtn, clearBtn;
+let drawingTools, colorSelect, thicknessSelect, undoBtn, clearBtn, giveUpBtn;
 let myCanvas, ctx;
 let chatBox, chatInput, chatSendBtn;
 let playersList;
@@ -17,17 +17,20 @@ let amICurrentDrawer = false;
 let isDecisionPhase = false;
 let isDrawingPhase = false;
 
+// Toolbox settings
+let currentColor = '#000000';
+let currentThickness = 1;
+
 // For partial drawing
 let drawing = false;
-let pathPoints = [];  // Store all points for final stroke
+let pathPoints = [];  // array of {x,y}
 let lastX, lastY;
 
-// For final strokes
-let strokes = []; // { strokeId, path, color, drawerId }
+// Strokes from server for re-draw
+let strokes = [];
 let countdownInterval = null;
 
 window.addEventListener('load', () => {
-  // DOM elements
   nicknamePrompt = document.getElementById('nicknamePrompt');
   nicknameInput = document.getElementById('nicknameInput');
   joinBtn = document.getElementById('joinBtn');
@@ -43,8 +46,11 @@ window.addEventListener('load', () => {
   skipBtn = document.getElementById('skipBtn');
 
   drawingTools = document.getElementById('drawingTools');
+  colorSelect = document.getElementById('colorSelect');
+  thicknessSelect = document.getElementById('thicknessSelect');
   undoBtn = document.getElementById('undoBtn');
   clearBtn = document.getElementById('clearBtn');
+  giveUpBtn = document.getElementById('giveUpBtn');
 
   myCanvas = document.getElementById('myCanvas');
   ctx = myCanvas.getContext('2d');
@@ -55,17 +61,16 @@ window.addEventListener('load', () => {
 
   playersList = document.getElementById('playersList');
 
-  // 1) Hide the main game container, show only after nickname
+  // Hide main container initially
   gameContainer.style.display = 'none';
 
-  // Join game on button click
+  // Nickname join
   joinBtn.addEventListener('click', () => {
     const name = nicknameInput.value.trim();
     if (name) {
       username = name;
       socket.emit('joinGame', username);
 
-      // Hide the prompt, show the game
       nicknamePrompt.style.display = 'none';
       gameContainer.style.display = 'flex';
     }
@@ -79,68 +84,108 @@ window.addEventListener('load', () => {
     socket.emit('drawChoice', 'skip');
   });
 
-  // Drawing tools
+  // Toolbox
+  colorSelect.addEventListener('change', (e) => {
+    currentColor = e.target.value;
+  });
+  thicknessSelect.addEventListener('change', (e) => {
+    currentThickness = parseInt(e.target.value, 10);
+  });
+
   undoBtn.addEventListener('click', () => {
     socket.emit('undoStroke');
   });
   clearBtn.addEventListener('click', () => {
     socket.emit('clearCanvas');
   });
+  giveUpBtn.addEventListener('click', () => {
+    socket.emit('giveUp');
+  });
 
-  // Canvas events for real-time drawing
+  // Mouse drawing
   myCanvas.addEventListener('mousedown', (e) => {
     if (!amICurrentDrawer || !isDrawingPhase) return;
-    drawing = true;
-    pathPoints = []; // reset
-    const { x, y } = getCanvasCoords(e);
-    lastX = x;
-    lastY = y;
-    pathPoints.push({ x, y });
+    e.preventDefault();
+    startDrawing(e.clientX, e.clientY);
   });
-
   myCanvas.addEventListener('mousemove', (e) => {
     if (!amICurrentDrawer || !isDrawingPhase || !drawing) return;
+    e.preventDefault();
+    moveDrawing(e.clientX, e.clientY);
+  });
+  myCanvas.addEventListener('mouseup', (e) => {
+    if (drawing) {
+      e.preventDefault();
+      endDrawing();
+    }
+  });
+  myCanvas.addEventListener('mouseleave', (e) => {
+    if (drawing) {
+      e.preventDefault();
+      endDrawing();
+    }
+  });
 
-    const { x, y } = getCanvasCoords(e);
+  // Touch drawing
+  myCanvas.addEventListener('touchstart', (e) => {
+    if (!amICurrentDrawer || !isDrawingPhase) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    startDrawing(touch.clientX, touch.clientY);
+  }, { passive: false });
+  myCanvas.addEventListener('touchmove', (e) => {
+    if (!amICurrentDrawer || !isDrawingPhase || !drawing) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    moveDrawing(touch.clientX, touch.clientY);
+  }, { passive: false });
+  myCanvas.addEventListener('touchend', (e) => {
+    if (drawing) {
+      e.preventDefault();
+      endDrawing();
+    }
+  }, { passive: false });
 
-    // Send partial line segment from (lastX,lastY) to (x,y)
+  function startDrawing(clientX, clientY) {
+    drawing = true;
+    pathPoints = [];
+    const { x, y } = getCanvasCoords(clientX, clientY);
+    lastX = x;
+    lastY = y;
+    pathPoints.push({ x, y });
+  }
+  function moveDrawing(clientX, clientY) {
+    const { x, y } = getCanvasCoords(clientX, clientY);
+
+    // Emit partial line
     socket.emit('partialDrawing', {
-      fromX: lastX,
-      fromY: lastY,
-      toX: x,
-      toY: y,
-      color: 'local' // will be replaced by server with actual color if needed
+      fromX: lastX, fromY: lastY, toX: x, toY: y,
+      color: currentColor,
+      thickness: currentThickness
     });
 
-    // Also draw it locally
-    drawSegment(lastX, lastY, x, y, 'rgba(0,0,0,0.4)');
+    // Draw partial line locally
+    drawSegment(lastX, lastY, x, y, currentColor, currentThickness, 0.4);
 
     pathPoints.push({ x, y });
     lastX = x;
     lastY = y;
-  });
-
-  myCanvas.addEventListener('mouseup', () => {
-    if (drawing) {
-      drawing = false;
-      // Send the complete path for server storage (undo/clear)
-      socket.emit('strokeComplete', pathPoints);
-    }
-  });
-
-  myCanvas.addEventListener('mouseleave', () => {
-    if (drawing) {
-      drawing = false;
-      socket.emit('strokeComplete', pathPoints);
-    }
-  });
+  }
+  function endDrawing() {
+    drawing = false;
+    // Final stroke with color & thickness
+    socket.emit('strokeComplete', {
+      path: pathPoints,
+      color: currentColor,
+      thickness: currentThickness
+    });
+  }
 
   // Chat
   chatSendBtn.addEventListener('click', sendChatMessage);
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendChatMessage();
   });
-
   function sendChatMessage() {
     const text = chatInput.value.trim();
     if (text && username) {
@@ -151,7 +196,6 @@ window.addEventListener('load', () => {
 
   /* ======================== SOCKET EVENTS ======================== */
 
-  // Initial strokes & chat
   socket.on('initCanvas', (allStrokes) => {
     strokes = allStrokes;
     redrawCanvas();
@@ -161,20 +205,17 @@ window.addEventListener('load', () => {
     messages.forEach((msg) => appendChat(msg.username, msg.text));
   });
 
-  // Partial real-time drawing from others
-  socket.on('partialDrawing', ({ fromX, fromY, toX, toY, color }) => {
-    // color is determined on the server side if needed, but
-    // we can just draw it in a semitransparent style
-    drawSegment(fromX, fromY, toX, toY, 'rgba(0,0,0,0.4)');
+  socket.on('partialDrawing', ({ fromX, fromY, toX, toY, color, thickness }) => {
+    // Draw partial line from others
+    drawSegment(fromX, fromY, toX, toY, color || 'black', thickness || 1, 0.4);
   });
 
-  // Final stroke completed by someone (including me, but I'll have it already)
   socket.on('strokeComplete', (stroke) => {
+    // { strokeId, path, color, thickness, drawerId }
     strokes.push(stroke);
     drawStroke(stroke);
   });
 
-  // Remove stroke (undo)
   socket.on('removeStroke', (strokeId) => {
     const idx = strokes.findIndex(s => s.strokeId === strokeId);
     if (idx !== -1) {
@@ -183,7 +224,6 @@ window.addEventListener('load', () => {
     }
   });
 
-  // Clear
   socket.on('clearCanvas', () => {
     strokes = [];
     redrawCanvas();
@@ -201,7 +241,6 @@ window.addEventListener('load', () => {
     isDecisionPhase = !drawingPhase;
     isDrawingPhase = drawingPhase;
 
-    // Stop old countdown
     stopCountdown();
 
     if (amICurrentDrawer && isDecisionPhase) {
@@ -258,20 +297,22 @@ window.addEventListener('load', () => {
     });
   });
 
-  /* ======================= HELPER FUNCTIONS ======================= */
+  /* ======================= HELPER FUNCS ======================= */
 
-  function getCanvasCoords(e) {
+  function getCanvasCoords(clientX, clientY) {
     const rect = myCanvas.getBoundingClientRect();
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: clientX - rect.left,
+      y: clientY - rect.top
     };
   }
 
-  function drawSegment(x1, y1, x2, y2, strokeStyle) {
+  // drawSegment can have partial alpha for partial strokes
+  function drawSegment(x1, y1, x2, y2, strokeStyle, thickness, alpha=1.0) {
     ctx.save();
     ctx.strokeStyle = strokeStyle;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = thickness;
+    ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
@@ -280,11 +321,12 @@ window.addEventListener('load', () => {
   }
 
   function drawStroke(stroke) {
-    const { path, color } = stroke;
+    const { path, color, thickness } = stroke;
     if (!path || path.length < 2) return;
     ctx.save();
     ctx.strokeStyle = color || 'black';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = thickness || 1;
+    ctx.globalAlpha = 1.0;
     ctx.beginPath();
     for (let i = 0; i < path.length - 1; i++) {
       const p1 = path[i];
@@ -331,18 +373,15 @@ window.addEventListener('load', () => {
       }
     }, 1000);
   }
-
   function stopCountdown() {
     if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = null;
     countdownBar.style.display = 'none';
     countdownNumber.style.display = 'none';
   }
-
   function updateCountdownBar(progress) {
     countdownFill.style.width = (progress * 100) + '%';
   }
-
   function updateCountdownNumber(num) {
     countdownNumber.textContent = num + 's';
   }
