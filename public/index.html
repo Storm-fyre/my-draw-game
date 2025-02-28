@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Colorful Draw Game</title>
+  <style>
+    body {
+      margin: 0; 
+      padding: 0;
+      background: linear-gradient(135deg, #ffe6e6, #e6f7ff);
+      font-family: "Comic Sans MS", cursive, sans-serif;
+      user-select: none;
+    }
+    #topBar {
+      background-color: #ff99cc;
+      padding: 10px;
+      text-align: center;
+      font-size: 1.4em;
+      color: white;
+    }
+
+    /* Hide the game container until nickname is provided */
+    #gameContainer {
+      display: none; /* Initially hidden */
+      height: calc(100vh - 50px);
+    }
+    .flexRow {
+      display: flex;
+    }
+    #leftPanel, #rightPanel {
+      padding: 10px;
+    }
+    #leftPanel {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+    }
+    #rightPanel {
+      width: 300px;
+      display: flex;
+      flex-direction: column;
+      border-left: 2px solid #ff99cc;
+    }
+
+    /* Nickname Prompt */
+    #nicknamePrompt {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: calc(100vh - 50px);
+    }
+    #nicknamePromptContent {
+      background: #ffffffbb;
+      padding: 20px;
+      border-radius: 6px;
+      border: 2px solid #ff99cc;
+      text-align: center;
+    }
+    #nicknamePromptContent input {
+      padding: 8px;
+      font-size: 1em;
+      margin-right: 10px;
+    }
+    #nicknamePromptContent button {
+      background: #ff66cc;
+      border: none;
+      padding: 8px 16px;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #nicknamePromptContent button:hover {
+      background: #fa49bd;
+    }
+
+    /* Turn Info & Countdown */
+    #turnInfo {
+      text-align: center;
+      margin: 5px 0;
+      font-size: 1.2em;
+      color: #444;
+    }
+    #countdownBar {
+      margin: 5px auto;
+      width: 80%;
+      height: 20px;
+      background: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+      transition: width 0.3s ease;
+    }
+    #countdownFill {
+      background: #ff66cc;
+      height: 100%;
+      width: 100%;
+      transition: width 0.3s linear;
+    }
+    #countdownNumber {
+      text-align: center;
+      font-weight: bold;
+      color: #ff66cc;
+      font-size: 1em;
+      margin-top: 5px;
+    }
+
+    /* Decision and Drawing Buttons */
+    #decisionButtons, #drawingTools {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    #decisionButtons button, #drawingTools button {
+      background: #ff66cc;
+      border: none;
+      padding: 8px 16px;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #decisionButtons button:hover, #drawingTools button:hover {
+      background: #fa49bd;
+    }
+
+    /* Canvas */
+    #canvasContainer {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #myCanvas {
+      border: 2px dashed #ff66cc;
+      background-color: #fff;
+      border-radius: 8px;
+      cursor: crosshair;
+    }
+
+    /* Players List */
+    #playersList {
+      background: #ffffffbb;
+      border: 2px solid #ff99cc;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+      overflow-y: auto;
+      max-height: 200px;
+    }
+    .player-item {
+      display: flex;
+      align-items: center;
+      margin: 4px 0;
+    }
+    .player-color-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      margin-right: 6px;
+      border: 1px solid #333;
+    }
+
+    /* Chat */
+    #chatBox {
+      flex: 1;
+      background: #ffffffbb;
+      border: 2px solid #ff99cc;
+      border-radius: 6px;
+      padding: 10px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+    #chatBox div {
+      margin: 4px 0;
+      padding: 4px 6px;
+      border-radius: 4px;
+      background: #fff;
+    }
+    #chatInputSection {
+      display: flex;
+      gap: 5px;
+    }
+    #chatInputSection input {
+      flex: 1;
+      padding: 6px;
+      border: 2px solid #cccccc;
+      border-radius: 4px;
+    }
+    #chatInputSection button {
+      background: #ff66cc;
+      border: none;
+      padding: 8px 12px;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #chatInputSection button:hover {
+      background: #fa49bd;
+    }
+  </style>
+</head>
+<body>
+  <div id="topBar">Draw Game: Colorful Edition</div>
+
+  <!-- Nickname Prompt (shown first) -->
+  <div id="nicknamePrompt">
+    <div id="nicknamePromptContent">
+      <h2>Welcome! Please enter your nickname:</h2>
+      <input id="nicknameInput" placeholder="Enter your nickname" />
+      <button id="joinBtn">Join</button>
+    </div>
+  </div>
+
+  <!-- Main Game Container (hidden until join) -->
+  <div id="gameContainer" class="flexRow">
+    <div id="leftPanel">
+      <div id="turnInfo">Waiting for players...</div>
+
+      <!-- Countdown Bar and Number -->
+      <div id="countdownBar" style="display:none;">
+        <div id="countdownFill"></div>
+      </div>
+      <div id="countdownNumber" style="display:none;">0</div>
+
+      <!-- Decision Buttons -->
+      <div id="decisionButtons" style="display: none;">
+        <button id="drawBtn">Draw</button>
+        <button id="skipBtn">Skip</button>
+      </div>
+
+      <!-- Drawing Tools -->
+      <div id="drawingTools" style="display: none;">
+        <button id="undoBtn">Undo</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+
+      <div id="canvasContainer">
+        <canvas id="myCanvas" width="600" height="400"></canvas>
+      </div>
+    </div>
+
+    <div id="rightPanel">
+      <div id="playersList"></div>
+
+      <div id="chatBox"></div>
+      <div id="chatInputSection">
+        <input id="chatInput" placeholder="Say something nice..." />
+        <button id="chatSendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Client Logic -->
+  <script src="client.js"></script>
+</body>
+</html>
