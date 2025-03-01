@@ -3,6 +3,7 @@ const socket = io();
 let nickname = "";
 let brushColor = "#000000";
 let brushThickness = 4;
+let joined = false; // new flag to prevent multiple join events
 
 const drawingCanvas = document.getElementById("drawingCanvas");
 const ctx = drawingCanvas.getContext("2d");
@@ -47,8 +48,10 @@ let players = [];
 
 // --- Handle Join ---
 joinBtn.addEventListener("click", () => {
+  if (joined) return; // prevent multiple join events
   nickname = nicknameInput.value.trim();
   if (nickname !== "") {
+    joined = true;
     socket.emit("join", nickname);
     nicknameModal.classList.add("hidden");
     gameContainer.classList.remove("hidden");
