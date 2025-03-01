@@ -12,7 +12,7 @@
     <div class="modal-content">
       <h2>Enter your nickname</h2>
       <input type="text" id="nicknameInput" placeholder="Nickname">
-      <button id="joinBtn">Join Game</button>
+      <button id="joinNicknameBtn">Next</button>
     </div>
   </div>
 
@@ -20,21 +20,28 @@
   <div id="lobbyModal" class="modal" style="display:none;">
     <div class="modal-content">
       <h2>Select a Lobby</h2>
-      <div id="lobbiesList">
-        <!-- Available lobbies will be listed here as buttons -->
+      <div id="lobbyList">
+        <!-- Lobby buttons will be injected here -->
       </div>
-      <input type="text" id="lobbyPasscode" placeholder="Enter passcode">
-      <button id="lobbyJoinBtn">Join Lobby</button>
-      <p id="lobbyError" style="color:red;"></p>
+    </div>
+  </div>
+
+  <!-- Passcode entry modal -->
+  <div id="passcodeModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Enter Passcode for <span id="selectedLobbyName"></span></h2>
+      <input type="password" id="passcodeInput" placeholder="Passcode">
+      <button id="joinLobbyBtn">Join Lobby</button>
+      <p id="passcodeError" style="color:red; display:none;"></p>
     </div>
   </div>
 
   <!-- Main game container -->
-  <div id="gameContainer">
+  <div id="gameContainer" style="display:none;">
     <!-- Canvas container -->
     <div id="canvasContainer">
       <canvas id="drawCanvas"></canvas>
-      <!-- Tools bar for brush thickness and colors -->
+      <!-- Tools bar -->
       <div id="toolsBar">
         <div id="brushThickness">
           <span>Thickness:</span>
@@ -67,23 +74,23 @@
           <button class="color" data-color="#A52A2A" style="background:#A52A2A;"></button>
         </div>
       </div>
-      <!-- Drawing control buttons for the active drawer -->
+      <!-- Drawing control buttons -->
       <div id="drawControls">
         <button id="undoBtn">Undo</button>
         <button id="clearBtn">Clear</button>
         <button id="giveUpBtn">Give Up</button>
       </div>
-      <!-- Turn prompt overlay (used for object selection in decision phase) -->
+      <!-- Turn prompt overlay (for object selection) -->
       <div id="turnPrompt">
         <div id="turnMessage">
           <p id="promptText">Your turn! Choose an object:</p>
           <div id="turnOptions">
-            <!-- Three buttons will be dynamically inserted here -->
+            <!-- Three object buttons will be inserted here -->
           </div>
           <div id="countdownDisplay">10</div>
         </div>
       </div>
-      <!-- Draw phase countdown display at top right of canvas -->
+      <!-- Draw phase countdown at top right -->
       <div id="drawCountdown" class="drawCountdown" style="display: none;"></div>
     </div>
 
@@ -94,13 +101,9 @@
       </div>
       <div id="boxContent">
         <!-- Chat view -->
-        <div id="chatBox" class="boxView">
-          <!-- Chat messages will be appended here -->
-        </div>
+        <div id="chatBox" class="boxView"></div>
         <!-- Players list view -->
-        <div id="playerBox" class="boxView" style="display:none;">
-          <!-- Player names and scores will be appended here -->
-        </div>
+        <div id="playerBox" class="boxView" style="display:none;"></div>
       </div>
       <!-- Chat input area -->
       <div id="chatInputContainer">

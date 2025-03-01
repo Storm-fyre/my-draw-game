@@ -3,81 +3,85 @@ const socket = io();
 let nickname = "";
 let isDrawing = false;
 let currentPath = [];
-let paths = []; // stores strokes (for undo) in normalized coordinates
+let paths = []; // stored drawing strokes (do NOT clear on resize)
 let currentColor = "#000000";
 let currentThickness = 4;
 let isMyTurn = false;
 
-// Modals
+// Modal elements
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
-const joinBtn = document.getElementById('joinBtn');
+const joinNicknameBtn = document.getElementById('joinNicknameBtn');
 
 const lobbyModal = document.getElementById('lobbyModal');
-const lobbiesListDiv = document.getElementById('lobbiesList');
-const lobbyPasscodeInput = document.getElementById('lobbyPasscode');
-const lobbyJoinBtn = document.getElementById('lobbyJoinBtn');
-const lobbyErrorP = document.getElementById('lobbyError');
+const lobbyListDiv = document.getElementById('lobbyList');
 
-// When nickname is set, emit to server and then show lobby selection.
-joinBtn.addEventListener('click', () => {
+const passcodeModal = document.getElementById('passcodeModal');
+const selectedLobbyNameSpan = document.getElementById('selectedLobbyName');
+const passcodeInput = document.getElementById('passcodeInput');
+const joinLobbyBtn = document.getElementById('joinLobbyBtn');
+const passcodeError = document.getElementById('passcodeError');
+
+const gameContainer = document.getElementById('gameContainer');
+
+// After entering nickname, send to server and show lobby selection
+joinNicknameBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
   if(name) {
     nickname = name;
     socket.emit('setNickname', nickname);
     nicknameModal.style.display = 'none';
-    // Lobby modal will be shown when server sends 'lobbiesList'
   }
 });
 
-// When lobbyJoinBtn is clicked, join the selected lobby.
-lobbyJoinBtn.addEventListener('click', () => {
-  const selectedLobbyBtn = document.querySelector('.lobbyBtn.selected');
-  if (!selectedLobbyBtn) {
-    lobbyErrorP.textContent = "Please select a lobby.";
-    return;
-  }
-  const lobbyName = selectedLobbyBtn.getAttribute('data-lobby');
-  const passcode = lobbyPasscodeInput.value.trim();
-  socket.emit('joinLobby', { lobbyName, passcode });
-});
-
-// When server sends list of lobbies, show them in the lobby modal.
-socket.on('lobbiesList', (lobbiesConfig) => {
-  lobbiesListDiv.innerHTML = "";
-  lobbiesConfig.forEach(lobby => {
+// When server sends available lobby list, show lobbyModal
+socket.on('lobbyList', (lobbies) => {
+  lobbyListDiv.innerHTML = '';
+  lobbies.forEach(lobby => {
     const btn = document.createElement('button');
-    btn.textContent = lobby.name;
-    btn.className = 'lobbyBtn';
-    btn.setAttribute('data-lobby', lobby.name);
+    btn.textContent = lobby;
     btn.addEventListener('click', () => {
-      // Mark selected button.
-      document.querySelectorAll('.lobbyBtn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
+      // Open passcode modal for selected lobby
+      selectedLobbyNameSpan.textContent = lobby;
+      passcodeModal.style.display = 'flex';
+      // Store selected lobby in a variable on the client side
+      passcodeModal.dataset.lobby = lobby;
     });
-    lobbiesListDiv.appendChild(btn);
+    lobbyListDiv.appendChild(btn);
   });
   lobbyModal.style.display = 'flex';
 });
 
-// Handle lobby error from server.
-socket.on('lobbyError', (errMsg) => {
-  lobbyErrorP.textContent = errMsg;
+// When joining lobby after entering passcode
+joinLobbyBtn.addEventListener('click', () => {
+  const lobbyName = passcodeModal.dataset.lobby;
+  const passcode = passcodeInput.value.trim();
+  socket.emit('joinLobby', { lobbyName, passcode });
+});
+
+// Handle lobby join error
+socket.on('lobbyJoinError', (msg) => {
+  passcodeError.style.display = 'block';
+  passcodeError.textContent = msg;
+});
+
+// Once joined lobby successfully, hide lobby and passcode modals and show game container
+socket.on('init', (data) => {
+  lobbyModal.style.display = 'none';
+  passcodeModal.style.display = 'none';
+  gameContainer.style.display = 'flex';
+  // Initialize chat messages and players list
+  data.chatMessages.forEach(msg => {
+    addChatMessage(msg);
+  });
+  updatePlayerList(data.players);
 });
 
 // Canvas setup
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 
-// Repaint canvas without clearing stored strokes
-function repaintCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  paths.forEach(stroke => {
-    drawStroke(stroke, false);
-  });
-}
-
-// Dynamic layout: make canvas square without clearing strokes.
+// Dynamic layout: adjust canvas and bottom box without clearing stored strokes
 function resizeLayout() {
   const gameContainer = document.getElementById('gameContainer');
   const boxContainer = document.getElementById('boxContainer');
@@ -92,24 +96,15 @@ function resizeLayout() {
   const boxHeight = totalHeight - width;
   boxContainer.style.height = boxHeight + "px";
 
-  // Repaint the drawing without clearing the saved strokes.
-  repaintCanvas();
+  // Instead of clearing strokes, simply redraw them
+  redrawAll();
 }
 
 window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', resizeLayout);
 
-// Do not clear canvas when keyboard shows up. Instead, adjust layout.
-const chatInput = document.getElementById('chatInput');
-chatInput.addEventListener('focus', () => {
-  resizeLayout();
-});
-chatInput.addEventListener('blur', () => {
-  resizeLayout();
-});
-
-// Toggle between chat and players list
+// Toggle between chat and player list
 const toggleBoxBtn = document.getElementById('toggleBox');
 const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
@@ -125,7 +120,9 @@ toggleBoxBtn.addEventListener('click', () => {
 });
 
 // Chat input
+const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChat');
+
 sendChatBtn.addEventListener('click', () => {
   const msg = chatInput.value.trim();
   if(msg) {
@@ -134,7 +131,7 @@ sendChatBtn.addEventListener('click', () => {
   }
 });
 
-// Append chat messages
+// Append a chat message
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
@@ -152,22 +149,24 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// Socket events for lobby game data
-socket.on('init', (data) => {
-  data.chatMessages.forEach(msg => addChatMessage(msg));
-  updatePlayerList(data.players);
+// Socket events for chat and player list updates
+socket.on('chatMessage', (data) => {
+  addChatMessage(data);
+});
+socket.on('updatePlayers', (playersArr) => {
+  updatePlayerList(playersArr);
 });
 
-socket.on('chatMessage', (data) => addChatMessage(data));
-socket.on('updatePlayers', (playersArr) => updatePlayerList(playersArr));
-
-// Drawing events
+// Handle drawing events from server
 socket.on('drawing', (data) => {
   drawStroke(data, false);
 });
 socket.on('clearCanvas', () => {
-  // When canvas is cleared as a game action, clear strokes.
+  // Clear only the visual canvas; do not reset stored strokes here.
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+});
+socket.on('resetPaths', () => {
+  // When a clear action is intentional, remove stored strokes.
   paths = [];
 });
 socket.on('undo', () => {
@@ -184,25 +183,23 @@ const drawCountdown = document.getElementById('drawCountdown');
 socket.on('turnStarted', (data) => {
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
-    // Object selection phase: wait for objectSelection event.
+    // Object selection will be handled via "objectSelection" event.
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'none';
   }
 });
-
 socket.on('turnCountdown', (timeLeft) => {
   if(turnPrompt.style.display !== 'none') {
     countdownDisplay.textContent = timeLeft;
   }
 });
-
 socket.on('turnTimeout', () => {
   turnPrompt.style.display = 'none';
   isMyTurn = false;
 });
 
-// Object selection event: show three buttons.
+// Object selection: show three buttons for the drawer
 socket.on('objectSelection', (data) => {
   if(data.options && data.options.length > 0) {
     isMyTurn = true;
@@ -234,13 +231,11 @@ socket.on('drawPhaseStarted', (data) => {
     drawCountdown.style.display = 'none';
   }
 });
-
 socket.on('drawPhaseCountdown', (timeLeft) => {
   if(drawCountdown.style.display !== 'none') {
     drawCountdown.textContent = timeLeft;
   }
 });
-
 socket.on('drawPhaseTimeout', () => {
   drawCountdown.style.display = 'none';
   isMyTurn = false;
@@ -292,13 +287,14 @@ canvas.addEventListener('touchstart', (e) => { startDrawing(e); });
 canvas.addEventListener('touchmove', (e) => { drawingMove(e); e.preventDefault(); });
 canvas.addEventListener('touchend', (e) => { stopDrawing(e); });
 
-// Draw stroke with smooth quadratic curves using normalized coordinates.
+// Draw stroke with smooth quadratic curves using normalized coordinates
 function drawStroke(data, emitLocal) {
   if(!data.path || data.path.length < 2) return;
   ctx.strokeStyle = data.color;
   ctx.lineWidth = data.thickness;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+
   ctx.beginPath();
   ctx.moveTo(data.path[0].x * canvas.width, data.path[0].y * canvas.height);
   for(let i = 1; i < data.path.length - 1; i++) {
@@ -315,18 +311,21 @@ function drawStroke(data, emitLocal) {
   ctx.stroke();
 }
 
-// Permanently clear canvas and stored strokes.
-function clearCanvas() {
+// Redraw all strokes without clearing the stored paths
+function redrawAll() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  paths = [];
+  paths.forEach(stroke => {
+    drawStroke(stroke, false);
+  });
 }
 
+// Undo last stroke
 function undoLastStroke() {
   paths.pop();
-  repaintCanvas();
+  redrawAll();
 }
 
-// Drawing tools: thickness and color selection
+// Drawing tools: thickness selection
 const thicknessButtons = document.querySelectorAll('.thickness');
 thicknessButtons.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -334,6 +333,7 @@ thicknessButtons.forEach(btn => {
   });
 });
 
+// Drawing tools: color selection
 const colorButtons = document.querySelectorAll('.color');
 colorButtons.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -351,14 +351,20 @@ document.getElementById('undoBtn').addEventListener('click', () => {
 document.getElementById('clearBtn').addEventListener('click', () => {
   if(isMyTurn) {
     socket.emit('clear');
-    clearCanvas();
   }
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
   if(isMyTurn) {
     socket.emit('giveUp');
-    clearCanvas();
     isMyTurn = false;
     drawCountdown.style.display = 'none';
   }
+});
+
+// Adjust layout when chat input is focused/blurred (without clearing canvas)
+chatInput.addEventListener('focus', () => {
+  resizeLayout();
+});
+chatInput.addEventListener('blur', () => {
+  resizeLayout();
 });

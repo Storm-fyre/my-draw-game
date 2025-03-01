@@ -1,4 +1,5 @@
-[
-  { "lobby": "Lobby1", "passcode": "1234" },
-  { "lobby": "FunDraw", "passcode": "abcd" }
-]
+{
+  "Fun Lobby": "1234",
+  "Artistic Arena": "abcd",
+  "Quick Draw": "qwerty"
+}
