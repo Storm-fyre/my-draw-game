@@ -81,6 +81,7 @@ socket.on('lobbyError', (data) => {
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
+const drawControlsDiv = document.getElementById('drawControls');
 
 // Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
@@ -275,10 +276,13 @@ function updateDashHint() {
 
 // --- Socket events ---
 socket.on('init', (data) => {
-  data.chatMessages.forEach(msg => {
-    addChatMessage(msg);
-  });
+  // For new joiners, use the fresh (empty) chat history.
   updatePlayerList(data.players);
+  // If canvas strokes exist, load them so the new player sees the current drawing.
+  if(data.canvasStrokes) {
+    paths = data.canvasStrokes;
+    redrawStrokes();
+  }
 });
 
 socket.on('chatMessage', (data) => {
@@ -290,7 +294,7 @@ socket.on('updatePlayers', (playersArr) => {
 });
 
 socket.on('drawing', (data) => {
-  // For non-drawing players, update the current remote stroke
+  // For non-drawing players, update the current remote stroke.
   if (!isMyTurn) {
     currentRemoteStroke = data;
     redrawStrokes();
@@ -298,7 +302,7 @@ socket.on('drawing', (data) => {
 });
 
 socket.on('strokeComplete', (data) => {
-  // When a complete stroke is received from the drawing player, add it permanently.
+  // When a complete stroke is received, add it permanently.
   if (!isMyTurn) {
     paths.push(data);
     currentRemoteStroke = null;
@@ -327,12 +331,13 @@ const drawCountdown = document.getElementById('drawCountdown');
 socket.on('turnStarted', (data) => {
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
-    // Drawing player: no dash hint needed.
     dashHintDiv.textContent = "";
   } else {
     isMyTurn = false;
   }
   turnPrompt.style.display = (data.currentDrawer === socket.id) ? 'flex' : 'none';
+  // Show draw controls only for drawing player.
+  drawControlsDiv.style.display = (data.currentDrawer === socket.id) ? 'block' : 'none';
 });
 
 socket.on('turnCountdown', (timeLeft) => {
@@ -380,12 +385,14 @@ socket.on('drawPhaseStarted', (data) => {
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
-    // Drawing player sees no dash hint.
     dashHintDiv.textContent = "";
+    drawControlsDiv.style.display = 'block';
   } else {
     isMyTurn = false;
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
+    // Hide drawing controls for non-drawing players.
+    drawControlsDiv.style.display = 'none';
   }
 });
 
@@ -398,7 +405,6 @@ socket.on('drawPhaseCountdown', (timeLeft) => {
 socket.on('drawPhaseTimeout', () => {
   drawCountdown.style.display = 'none';
   isMyTurn = false;
-  // Clear dash hint after time runs out.
   dashHintDiv.textContent = "";
 });
 
@@ -435,7 +441,6 @@ function drawingMove(e) {
 function stopDrawing(e) {
   if (!isMyTurn) return;
   if(isDrawing) {
-    // For drawing player, add the complete stroke locally and emit to non-drawing players.
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
     socket.emit('strokeComplete', stroke);

@@ -25,6 +25,7 @@ function createLobbyState() {
     players: {},        // socket.id -> { nickname, score }
     playerOrder: [],    // array of socket ids in join order
     chatMessages: [],
+    canvasStrokes: [],  // store completed strokes for new joiners
     currentDrawer: null,
     currentObject: null,
     guessedCorrectly: {},
@@ -91,8 +92,9 @@ function startNextTurn(lobbyName) {
     clearInterval(state.turnTimer);
     state.turnTimer = null;
   }
-  // Tell clients to clear the canvas
+  // Clear canvas state for the lobby
   io.to(lobbyName).emit('clearCanvas');
+  state.canvasStrokes = [];
   state.currentObject = null;
   state.guessedCorrectly = {};
   
@@ -150,9 +152,11 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
+    // NEW JOINER: send fresh (empty) chat and current canvas strokes
     socket.emit('init', {
       players: Object.values(state.players),
-      chatMessages: state.chatMessages
+      chatMessages: [],
+      canvasStrokes: state.canvasStrokes
     });
     io.to(lobbyName).emit('updatePlayers', Object.values(state.players));
     if (!state.currentDrawer) {
@@ -187,7 +191,7 @@ io.on('connection', (socket) => {
       state.currentObject = objectChosen;
       state.guessedCorrectly = {};
       state.currentDrawTimeLeft = DRAW_DURATION;
-      // Broadcast the chosen object (for dash hint) to all players
+      // Broadcast the chosen object for dash hint display on non-drawing clients.
       io.to(lobbyName).emit('objectChosenBroadcast', { object: state.currentObject });
       io.to(lobbyName).emit('drawPhaseStarted', { currentDrawer: state.currentDrawer, duration: DRAW_DURATION });
       let timeLeft = DRAW_DURATION;
@@ -223,6 +227,14 @@ io.on('connection', (socket) => {
           const correctMsg = `${nickname} guessed correctly and earned ${points} points!`;
           io.to(lobbyName).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
           io.to(lobbyName).emit('updatePlayers', Object.values(state.players));
+          // Check if all non-drawing players have guessed
+          if (Object.keys(state.guessedCorrectly).length >= (Object.keys(state.players).length - 1)) {
+            if (state.turnTimer) {
+              clearInterval(state.turnTimer);
+              state.turnTimer = null;
+            }
+            startNextTurn(lobbyName);
+          }
           return;
         }
       }
@@ -249,7 +261,9 @@ io.on('connection', (socket) => {
   socket.on('strokeComplete', (data) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
-    // Broadcast the complete stroke so non-drawing players can store it.
+    const state = activeLobbies[lobbyName];
+    // Add the complete stroke to the lobby's canvas state
+    state.canvasStrokes.push(data);
     socket.to(lobbyName).emit('strokeComplete', data);
   });
   
@@ -268,6 +282,7 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     if (socket.id === state.currentDrawer) {
       io.to(lobbyName).emit('clearCanvas');
+      state.canvasStrokes = [];
     }
   });
   
@@ -281,6 +296,7 @@ io.on('connection', (socket) => {
         state.turnTimer = null;
       }
       io.to(lobbyName).emit('clearCanvas');
+      state.canvasStrokes = [];
       startNextTurn(lobbyName);
     }
   });
