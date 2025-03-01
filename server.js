@@ -11,7 +11,7 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Data
-let players = [];             // { socketId, username, color }
+let players = []; // { socketId, username, color }
 let currentTurnIndex = 0;
 let isDrawingPhase = false;
 let decisionTimer = null;
@@ -20,20 +20,22 @@ let drawingTimer = null;
 let strokes = []; // { strokeId, path, color, thickness, drawerId }
 let nextStrokeId = 1;
 
-// Chat
-let chatMessages = []; // store last 15 messages
+// Chat (store last 20 messages)
+let chatMessages = []; // each: { username, text }
 
 // === Utility ===
 function generateRandomColor() {
   const hue = Math.floor(Math.random() * 360);
   return `hsl(${hue}, 90%, 80%)`;
 }
+
 function clearTimers() {
   if (decisionTimer) clearTimeout(decisionTimer);
   if (drawingTimer) clearTimeout(drawingTimer);
   decisionTimer = null;
   drawingTimer = null;
 }
+
 function nextTurn() {
   clearTimers();
   if (players.length === 0) return;
@@ -42,6 +44,7 @@ function nextTurn() {
   isDrawingPhase = false;
   startDecisionPhase();
 }
+
 function startDecisionPhase() {
   const currentPlayer = players[currentTurnIndex];
   if (!currentPlayer) return;
@@ -57,6 +60,7 @@ function startDecisionPhase() {
     nextTurn();
   }, 10000);
 }
+
 function startDrawingPhase() {
   const currentPlayer = players[currentTurnIndex];
   if (!currentPlayer) return;
@@ -76,6 +80,7 @@ function startDrawingPhase() {
     nextTurn();
   }, 70000);
 }
+
 function broadcastPlayersList() {
   io.emit('playersList', players.map(p => ({
     username: p.username,
@@ -125,7 +130,6 @@ io.on('connection', (socket) => {
     if (!currentPlayer || !isDrawingPhase) return;
     if (socket.id !== currentPlayer.socketId) return;
 
-    // Broadcast to others
     socket.broadcast.emit('partialDrawing', { fromX, fromY, toX, toY, color, thickness });
   });
 
@@ -143,7 +147,6 @@ io.on('connection', (socket) => {
       drawerId: currentPlayer.socketId
     };
     strokes.push(stroke);
-
     io.emit('strokeComplete', stroke);
   });
 
@@ -162,7 +165,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Clear
+  // Clear canvas
   socket.on('clearCanvas', () => {
     const currentPlayer = players[currentTurnIndex];
     if (!currentPlayer || !isDrawingPhase) return;
@@ -190,7 +193,10 @@ io.on('connection', (socket) => {
 
     const msg = { username: player.username, text };
     chatMessages.push(msg);
-    if (chatMessages.length > 15) chatMessages.shift();
+    // Store max 20
+    if (chatMessages.length > 20) {
+      chatMessages.shift();
+    }
     io.emit('chatMessage', msg);
   });
 

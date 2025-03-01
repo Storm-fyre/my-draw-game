@@ -1,7 +1,7 @@
 // client.js
 const socket = io();
 
-// DOM
+// DOM references
 let nicknamePrompt, nicknameInput, joinBtn;
 let gameContainer;
 let turnInfo, countdownBar, countdownFill, countdownNumber;
@@ -23,12 +23,15 @@ let currentThickness = 1;
 
 // For partial drawing
 let drawing = false;
-let pathPoints = [];  // array of {x,y}
+let pathPoints = [];
 let lastX, lastY;
 
 // Strokes from server for re-draw
 let strokes = [];
 let countdownInterval = null;
+
+// Chat messages (store up to 20 on client)
+let localMessages = [];
 
 window.addEventListener('load', () => {
   nicknamePrompt = document.getElementById('nicknamePrompt');
@@ -64,7 +67,7 @@ window.addEventListener('load', () => {
   // Hide main container initially
   gameContainer.style.display = 'none';
 
-  // Nickname join
+  // Join game
   joinBtn.addEventListener('click', () => {
     const name = nicknameInput.value.trim();
     if (name) {
@@ -72,7 +75,10 @@ window.addEventListener('load', () => {
       socket.emit('joinGame', username);
 
       nicknamePrompt.style.display = 'none';
-      gameContainer.style.display = 'flex';
+      gameContainer.style.display = 'block';
+
+      // Update orientation layout once joined
+      updateLayout();
     }
   });
 
@@ -84,14 +90,13 @@ window.addEventListener('load', () => {
     socket.emit('drawChoice', 'skip');
   });
 
-  // Toolbox
+  // Toolbox changes
   colorSelect.addEventListener('change', (e) => {
     currentColor = e.target.value;
   });
   thicknessSelect.addEventListener('change', (e) => {
     currentThickness = parseInt(e.target.value, 10);
   });
-
   undoBtn.addEventListener('click', () => {
     socket.emit('undoStroke');
   });
@@ -102,7 +107,7 @@ window.addEventListener('load', () => {
     socket.emit('giveUp');
   });
 
-  // Mouse drawing
+  // Drawing: Mouse
   myCanvas.addEventListener('mousedown', (e) => {
     if (!amICurrentDrawer || !isDrawingPhase) return;
     e.preventDefault();
@@ -126,7 +131,7 @@ window.addEventListener('load', () => {
     }
   });
 
-  // Touch drawing
+  // Drawing: Touch
   myCanvas.addEventListener('touchstart', (e) => {
     if (!amICurrentDrawer || !isDrawingPhase) return;
     e.preventDefault();
@@ -146,72 +151,51 @@ window.addEventListener('load', () => {
     }
   }, { passive: false });
 
-  function startDrawing(clientX, clientY) {
-    drawing = true;
-    pathPoints = [];
-    const { x, y } = getCanvasCoords(clientX, clientY);
-    lastX = x;
-    lastY = y;
-    pathPoints.push({ x, y });
-  }
-  function moveDrawing(clientX, clientY) {
-    const { x, y } = getCanvasCoords(clientX, clientY);
-
-    // Emit partial line
-    socket.emit('partialDrawing', {
-      fromX: lastX, fromY: lastY, toX: x, toY: y,
-      color: currentColor,
-      thickness: currentThickness
-    });
-
-    // Draw partial line locally
-    drawSegment(lastX, lastY, x, y, currentColor, currentThickness, 0.4);
-
-    pathPoints.push({ x, y });
-    lastX = x;
-    lastY = y;
-  }
-  function endDrawing() {
-    drawing = false;
-    // Final stroke with color & thickness
-    socket.emit('strokeComplete', {
-      path: pathPoints,
-      color: currentColor,
-      thickness: currentThickness
-    });
-  }
-
   // Chat
   chatSendBtn.addEventListener('click', sendChatMessage);
   chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendChatMessage();
-  });
-  function sendChatMessage() {
-    const text = chatInput.value.trim();
-    if (text && username) {
-      socket.emit('chatMessage', text);
-      chatInput.value = '';
+    if (e.key === 'Enter') {
+      sendChatMessage();
     }
-  }
+  });
 
-  /* ======================== SOCKET EVENTS ======================== */
+  // Detect focus/blur on chat input => "typing mode" (portrait only)
+  chatInput.addEventListener('focus', () => {
+    // If we are in portrait, set body.typing-mode
+    if (isPortrait()) {
+      document.body.classList.add('typing-mode');
+      updateLayout();
+    }
+  });
+  chatInput.addEventListener('blur', () => {
+    // Remove typing mode
+    document.body.classList.remove('typing-mode');
+    updateLayout();
+  });
 
+  // Listen for window resize to handle orientation changes
+  window.addEventListener('resize', () => {
+    updateLayout();
+  });
+
+  /***********************************************
+   * SOCKET EVENTS
+   ***********************************************/
   socket.on('initCanvas', (allStrokes) => {
     strokes = allStrokes;
     redrawCanvas();
   });
+
   socket.on('initChat', (messages) => {
-    chatBox.innerHTML = '';
-    messages.forEach((msg) => appendChat(msg.username, msg.text));
+    localMessages = messages.slice(-20); // store up to 20
+    renderChatMessages();
   });
 
   socket.on('partialDrawing', ({ fromX, fromY, toX, toY, color, thickness }) => {
-    // Draw partial line from others
-    drawSegment(fromX, fromY, toX, toY, color || 'black', thickness || 1, 0.4);
+    drawSegment(fromX, fromY, toX, toY, color || '#000', thickness || 1, 0.4);
   });
 
   socket.on('strokeComplete', (stroke) => {
-    // { strokeId, path, color, thickness, drawerId }
     strokes.push(stroke);
     drawStroke(stroke);
   });
@@ -229,12 +213,15 @@ window.addEventListener('load', () => {
     redrawCanvas();
   });
 
-  // Chat
   socket.on('chatMessage', (msg) => {
-    appendChat(msg.username, msg.text);
+    // Only keep last 20 locally
+    localMessages.push(msg);
+    if (localMessages.length > 20) {
+      localMessages.shift();
+    }
+    renderChatMessages();
   });
 
-  // Turn info
   socket.on('turnInfo', (data) => {
     const { currentPlayerId, currentPlayerName, isDrawingPhase: drawingPhase, timeLeft } = data;
     amICurrentDrawer = (socket.id === currentPlayerId);
@@ -277,7 +264,6 @@ window.addEventListener('load', () => {
     }
   });
 
-  // Players list
   socket.on('playersList', (players) => {
     playersList.innerHTML = '';
     players.forEach((p) => {
@@ -297,7 +283,65 @@ window.addEventListener('load', () => {
     });
   });
 
-  /* ======================= HELPER FUNCS ======================= */
+  /***********************************************
+   * HELPER FUNCTIONS
+   ***********************************************/
+  function sendChatMessage() {
+    const text = chatInput.value.trim();
+    if (text && username) {
+      socket.emit('chatMessage', text);
+      chatInput.value = '';
+    }
+  }
+
+  function isPortrait() {
+    return window.innerHeight >= window.innerWidth;
+  }
+
+  function updateLayout() {
+    // Add either .portrait or .landscape to #gameContainer
+    if (isPortrait()) {
+      gameContainer.classList.add('portrait');
+      gameContainer.classList.remove('landscape');
+    } else {
+      gameContainer.classList.add('landscape');
+      gameContainer.classList.remove('portrait');
+      // In landscape, we remove typing-mode
+      document.body.classList.remove('typing-mode');
+    }
+  }
+
+  function startDrawing(clientX, clientY) {
+    drawing = true;
+    pathPoints = [];
+    const { x, y } = getCanvasCoords(clientX, clientY);
+    lastX = x;
+    lastY = y;
+    pathPoints.push({ x, y });
+  }
+
+  function moveDrawing(clientX, clientY) {
+    const { x, y } = getCanvasCoords(clientX, clientY);
+    socket.emit('partialDrawing', {
+      fromX: lastX, fromY: lastY, toX: x, toY: y,
+      color: currentColor,
+      thickness: currentThickness
+    });
+    drawSegment(lastX, lastY, x, y, currentColor, currentThickness, 0.4);
+
+    pathPoints.push({ x, y });
+    lastX = x;
+    lastY = y;
+  }
+
+  function endDrawing() {
+    drawing = false;
+    socket.emit('strokeComplete', {
+      path: pathPoints,
+      color: currentColor,
+      thickness: currentThickness
+    });
+  }
 
   function getCanvasCoords(clientX, clientY) {
     const rect = myCanvas.getBoundingClientRect();
@@ -307,7 +351,6 @@ window.addEventListener('load', () => {
     };
   }
 
-  // drawSegment can have partial alpha for partial strokes
   function drawSegment(x1, y1, x2, y2, strokeStyle, thickness, alpha=1.0) {
     ctx.save();
     ctx.strokeStyle = strokeStyle;
@@ -324,7 +367,7 @@ window.addEventListener('load', () => {
     const { path, color, thickness } = stroke;
     if (!path || path.length < 2) return;
     ctx.save();
-    ctx.strokeStyle = color || 'black';
+    ctx.strokeStyle = color || '#000';
     ctx.lineWidth = thickness || 1;
     ctx.globalAlpha = 1.0;
     ctx.beginPath();
@@ -343,14 +386,18 @@ window.addEventListener('load', () => {
     strokes.forEach(s => drawStroke(s));
   }
 
-  function appendChat(user, text) {
-    const div = document.createElement('div');
-    div.textContent = `${user}: ${text}`;
-    chatBox.appendChild(div);
+  function renderChatMessages() {
+    // We have localMessages (up to 20).
+    chatBox.innerHTML = '';
+    localMessages.forEach(msg => {
+      const div = document.createElement('div');
+      div.textContent = `${msg.username}: ${msg.text}`;
+      chatBox.appendChild(div);
+    });
+    // Scroll to bottom to see the latest
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  // Countdown
   function startCountdown(total, onTick) {
     countdownBar.style.display = 'block';
     countdownNumber.style.display = 'block';
@@ -373,15 +420,18 @@ window.addEventListener('load', () => {
       }
     }, 1000);
   }
+
   function stopCountdown() {
     if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = null;
     countdownBar.style.display = 'none';
     countdownNumber.style.display = 'none';
   }
+
   function updateCountdownBar(progress) {
     countdownFill.style.width = (progress * 100) + '%';
   }
+
   function updateCountdownNumber(num) {
     countdownNumber.textContent = num + 's';
   }

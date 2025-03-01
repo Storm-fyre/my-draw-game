@@ -4,12 +4,19 @@
   <meta charset="utf-8" />
   <title>Colorful Draw Game</title>
   <style>
-    body {
-      margin: 0; 
+    /************************************************************
+     * Basic resets & body
+     ************************************************************/
+    * {
+      margin: 0;
       padding: 0;
-      background: linear-gradient(135deg, #ffe6e6, #e6f7ff);
+      box-sizing: border-box;
+    }
+    body {
       font-family: "Comic Sans MS", cursive, sans-serif;
+      background: linear-gradient(135deg, #ffe6e6, #e6f7ff);
       user-select: none;
+      /* We'll toggle a "typing-mode" class dynamically in JS. */
     }
     #topBar {
       background-color: #ff99cc;
@@ -19,37 +26,19 @@
       color: white;
     }
 
-    /* Hide game container until user enters nickname */
+    /************************************************************
+     * Hide the main game container until user enters nickname
+     ************************************************************/
     #gameContainer {
       display: none;
-      height: calc(100vh - 50px);
-    }
-    .flexRow {
-      display: flex;
-      flex-direction: row; /* default for landscape */
-      height: 100%;
+      width: 100vw;
+      height: calc(100vh - 50px); /* minus the topBar height */
+      overflow: hidden; /* we handle internal scrolling in sub-sections */
     }
 
-    #leftPanel, #rightPanel {
-      padding: 10px;
-    }
-
-    /* Left: main drawing area + turn info, etc. */
-    #leftPanel {
-      flex: 2;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Right: players list + chat container */
-    #rightPanel {
-      width: 300px;
-      display: flex;
-      flex-direction: column;
-      border-left: 2px solid #ff99cc;
-    }
-
-    /* Nickname Prompt */
+    /************************************************************
+     * Nickname Prompt (centered overlay before join)
+     ************************************************************/
     #nicknamePrompt {
       display: flex;
       justify-content: center;
@@ -82,13 +71,152 @@
       background: #fa49bd;
     }
 
-    /* Turn Info & Countdown */
+    /************************************************************
+     * Layout sections inside #gameContainer:
+     * #canvasSection, #chatSection, #playersSection
+     ************************************************************/
+    #canvasSection, 
+    #chatSection, 
+    #playersSection {
+      border: 1px solid #000; /* thin black border */
+      overflow: hidden;       /* let contents inside manage scroll if needed */
+      display: flex;
+      flex-direction: column;
+      position: relative;     /* for possible absolute children */
+    }
+
+    /* The actual canvas is inside #canvasSection */
+    #myCanvas {
+      flex: 1; /* fill available space in that section */
+      background-color: #fff;
+      border: 2px dashed #ff66cc;
+      border-radius: 8px;
+      touch-action: none; /* for touch drawing */
+      margin: 5px;        /* small inside margin */
+    }
+
+    /************************************************************
+     * Chat section
+     * We'll have #chatBox for messages (scrollable)
+     * and #chatInputSection for input.
+     ************************************************************/
+    #chatSection {
+      display: flex;
+      flex-direction: column;
+    }
+    /* The chatBox only shows last 5 lines in a small area by default,
+       but user can scroll to see older lines (max 20).
+       Let's give it a small fixed height in portrait or let it expand
+       in landscape as needed. We'll refine with media queries. */
+    #chatBox {
+      flex: 1;
+      overflow-y: auto; /* scrollable */
+      margin: 5px;
+      border: 1px solid #ff99cc;
+      border-radius: 4px;
+      background: #ffffffbb;
+      padding: 5px;
+    }
+    /* Chat lines inside #chatBox */
+    #chatBox div {
+      margin: 4px 0;
+      background: #fff;
+      border-radius: 3px;
+      padding: 3px 6px;
+    }
+    #chatInputSection {
+      display: flex;
+      gap: 5px;
+      margin: 5px;
+    }
+    #chatInputSection input {
+      flex: 1;
+      padding: 6px;
+      border: 2px solid #cccccc;
+      border-radius: 4px;
+    }
+    #chatInputSection button {
+      background: #ff66cc;
+      border: none;
+      padding: 8px 12px;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #chatInputSection button:hover {
+      background: #fa49bd;
+    }
+
+    /************************************************************
+     * Players section (scroll if too many players)
+     ************************************************************/
+    #playersSection {
+      overflow-y: auto; /* scroll if needed */
+    }
+    #playersList {
+      margin: 5px;
+      background: #ffffffbb;
+      border: 1px solid #ff99cc;
+      border-radius: 4px;
+      padding: 5px;
+    }
+    .player-item {
+      display: flex;
+      align-items: center;
+      margin: 4px 0;
+    }
+    .player-color-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      margin-right: 6px;
+      border: 1px solid #333;
+    }
+
+    /************************************************************
+     * Turn info, decision, drawing tools go inside #canvasSection
+     ************************************************************/
     #turnInfo {
       text-align: center;
-      margin: 5px 0;
-      font-size: 1.2em;
+      margin: 5px;
+      font-size: 1em;
       color: #444;
     }
+    #decisionButtons, 
+    #drawingTools {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 5px;
+    }
+    #decisionButtons button,
+    #drawingTools button {
+      background: #ff66cc;
+      border: none;
+      padding: 8px 16px;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #decisionButtons button:hover,
+    #drawingTools button:hover {
+      background: #fa49bd;
+    }
+
+    /* Toolbox selects (color & thickness) */
+    select {
+      padding: 5px;
+      border-radius: 4px;
+      border: 2px solid #ccc;
+      font-size: 0.9em;
+      cursor: pointer;
+    }
+
+    /* Countdown bar */
     #countdownBar {
       margin: 5px auto;
       width: 80%;
@@ -112,159 +240,98 @@
       margin-top: 5px;
     }
 
-    /* Decision Buttons & Drawing Tools */
-    #decisionButtons,
-    #drawingTools {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-      justify-content: center;
-    }
-    #decisionButtons button,
-    #drawingTools button {
-      background: #ff66cc;
-      border: none;
-      padding: 8px 16px;
-      color: #fff;
-      font-weight: bold;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.2s ease;
-    }
-    #decisionButtons button:hover,
-    #drawingTools button:hover {
-      background: #fa49bd;
-    }
+    /************************************************************
+     * RESPONSIVE LAYOUT
+     * We'll rely on orientation media queries:
+     * portrait vs. landscape
+     * Then we also handle "typing mode" with a body.typed-chat class in JS
+     ************************************************************/
 
-    /* Toolbox select style */
-    select {
-      padding: 5px;
-      border-radius: 4px;
-      border: 2px solid #ccc;
-      font-size: 0.9em;
-      cursor: pointer;
-    }
-
-    /* Canvas area */
-    #canvasContainer {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    #myCanvas {
-      border: 2px dashed #ff99cc;
-      background-color: #fff;
-      border-radius: 8px;
-      touch-action: none; /* For touch devices */
-    }
-
-    /* Players List */
-    #playersList {
-      background: #ffffffbb;
-      border: 2px solid #ff99cc;
-      border-radius: 6px;
-      padding: 10px;
-      margin-bottom: 10px;
-      overflow-y: auto;
-      max-height: 200px;
-    }
-    .player-item {
-      display: flex;
-      align-items: center;
-      margin: 4px 0;
-    }
-    .player-color-swatch {
-      width: 16px;
-      height: 16px;
-      border-radius: 3px;
-      margin-right: 6px;
-      border: 1px solid #333;
-    }
-
-    /* Chat container + messages + input */
-    #chatContainer {
+    /* By default (portrait, not typing) => 3 sections stacked:
+       Top 60%: Canvas
+       Bottom 40%: Chat (70% width), Players (30% width) horizontally. */
+    body:not(.typing-mode) #gameContainer.portrait {
       display: flex;
       flex-direction: column;
-      flex: 1; /* let it expand in landscape if needed */
     }
-    #chatBox {
-      flex: 1;
-      background: #ffffffbb;
-      border: 2px solid #ff99cc;
-      border-radius: 6px;
-      padding: 10px;
-      overflow-y: auto;
-      margin-bottom: 10px;
-    }
-    #chatBox div {
-      margin: 4px 0;
-      padding: 4px 6px;
-      border-radius: 4px;
-      background: #fff;
-    }
-    #chatInputSection {
+    body:not(.typing-mode) #gameContainer.portrait #canvasSection {
+      flex: 6; /* top 60% */
       display: flex;
-      gap: 5px;
+      flex-direction: column;
     }
-    #chatInputSection input {
-      flex: 1;
-      padding: 6px;
-      border: 2px solid #cccccc;
-      border-radius: 4px;
+    body:not(.typing-mode) #gameContainer.portrait .bottomRow {
+      flex: 4; /* bottom 40% */
+      display: flex;
+      flex-direction: row;
+      width: 100%;
     }
-    #chatInputSection button {
-      background: #ff66cc;
-      border: none;
-      padding: 8px 12px;
-      color: #fff;
-      font-weight: bold;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.2s ease;
+    body:not(.typing-mode) #gameContainer.portrait #chatSection {
+      flex: 7; /* ~70% horizontal space */
+      display: flex;
+      flex-direction: column;
     }
-    #chatInputSection button:hover {
-      background: #fa49bd;
+    body:not(.typing-mode) #gameContainer.portrait #playersSection {
+      flex: 3; /* ~30% horizontal space */
     }
 
-    /* =========================== MEDIA QUERY FOR PORTRAIT ===========================
-       When in portrait mode:
-         - Top 60%: #leftPanel (canvas, turn info, etc.)
-         - Bottom 40%: horizontally split: left 70% chat, right 30% players
-    */
+    /* If user is typing, hide players, side-by-side (75% canvas, 25% chat). */
+    body.typing-mode #gameContainer.portrait {
+      display: flex;
+      flex-direction: row;
+    }
+    body.typing-mode #gameContainer.portrait #playersSection {
+      display: none; /* hide players during typing */
+    }
+    body.typing-mode #gameContainer.portrait #canvasSection {
+      flex: 3; /* ~75% */
+      display: flex;
+      flex-direction: column;
+    }
+    body.typing-mode #gameContainer.portrait #chatSection {
+      flex: 1; /* ~25% */
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* LANDSCAPE:
+       75% left => canvas, 25% right => top 40% players, bottom 60% chat
+       No changes if user is typing or not, based on your description. */
+    #gameContainer.landscape {
+      display: flex;
+      flex-direction: row;
+    }
+    #gameContainer.landscape #canvasSection {
+      flex: 3; /* 75% */
+      display: flex;
+      flex-direction: column;
+    }
+    #gameContainer.landscape .rightColumn {
+      flex: 1; /* 25% */
+      display: flex;
+      flex-direction: column;
+    }
+    #gameContainer.landscape #playersSection {
+      flex: 4; /* top 40% (but we'll tweak ratio inside a column) */
+    }
+    #gameContainer.landscape #chatSection {
+      flex: 6; /* bottom 60% */
+      display: flex;
+      flex-direction: column;
+    }
+
+    /************************************************************
+     * Media Queries to detect orientation:
+     ************************************************************/
     @media (orientation: portrait) {
-      .flexRow {
-        flex-direction: column; /* stack top -> bottom */
+      #gameContainer {
+        /* add a portrait class in JS, but let's default it here */
+        flex-direction: column;
       }
-
-      #leftPanel {
-        /* top 60% */
-        width: 100%;
-        height: 60%;
-        border-right: none;
-        border-bottom: 2px solid #ff99cc;
-      }
-
-      #rightPanel {
-        /* bottom 40% */
-        width: 100%;
-        height: 40%;
-        display: flex;
+    }
+    @media (orientation: landscape) {
+      #gameContainer {
+        /* add a landscape class in JS */
         flex-direction: row;
-        border-left: none;
-      }
-
-      /* Chat (70%) + Players (30%) in bottom row */
-      #chatContainer {
-        width: 70%;
-        padding-right: 5px;
-        border-right: 2px solid #ff99cc;
-      }
-      #playersList {
-        width: 30%;
-        margin-bottom: 0; /* so it fits nicely in row */
-        max-height: 100%;
       }
     }
   </style>
@@ -281,13 +348,13 @@
     </div>
   </div>
 
-  <!-- Main Game Container -->
-  <div id="gameContainer" class="flexRow">
-    <!-- LEFT PANEL: Canvas + Turn Info -->
-    <div id="leftPanel">
-      <div id="turnInfo">Waiting for players...</div>
+  <!-- Main Container -->
+  <div id="gameContainer">
+    <!-- We'll nest sub-sections so we can reorder them in CSS or JS easily. -->
 
-      <!-- Countdown -->
+    <!-- Canvas Section -->
+    <div id="canvasSection">
+      <div id="turnInfo">Waiting for players...</div>
       <div id="countdownBar" style="display:none;">
         <div id="countdownFill"></div>
       </div>
@@ -301,7 +368,6 @@
 
       <!-- Drawing Tools -->
       <div id="drawingTools" style="display:none;">
-        <!-- Color/Thickness Toolbox -->
         <select id="colorSelect">
           <option value="#000000">Black</option>
           <option value="#ffffff">White</option>
@@ -337,28 +403,31 @@
         <button id="giveUpBtn">Give Up</button>
       </div>
 
-      <div id="canvasContainer">
-        <canvas id="myCanvas" width="600" height="400"></canvas>
-      </div>
+      <!-- The Canvas itself -->
+      <canvas id="myCanvas" width="600" height="400"></canvas>
     </div>
 
-    <!-- RIGHT PANEL: Players & Chat -->
-    <div id="rightPanel">
-      <div id="chatContainer">
+    <!-- For portrait, these two below are in a "bottomRow", for landscape they are in a "rightColumn" -->
+    <div class="bottomRow rightColumn">
+      <!-- Chat Section -->
+      <div id="chatSection">
         <div id="chatBox"></div>
         <div id="chatInputSection">
-          <input id="chatInput" placeholder="Say something nice..." />
+          <input id="chatInput" placeholder="Type a message..." />
           <button id="chatSendBtn">Send</button>
         </div>
       </div>
 
-      <div id="playersList"></div>
+      <!-- Players List -->
+      <div id="playersSection">
+        <div id="playersList"></div>
+      </div>
     </div>
   </div>
 
   <!-- Socket.IO client -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Client-Side Logic -->
+  <!-- Client Logic -->
   <script src="client.js"></script>
 </body>
 </html>
