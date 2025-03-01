@@ -1,7 +1,7 @@
 {
   "name": "my-draw-game",
   "version": "1.0.0",
-  "description": "A drawasaurus-like game for mobile portrait orientation",
+  "description": "A drawasaurus-like game with lobby support and normalized drawing",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

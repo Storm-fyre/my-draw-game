@@ -4,10 +4,16 @@ body, html {
   padding: 0;
   height: 100%;
   font-family: Arial, sans-serif;
-  background-color: #e0f2e9;
+  background-color: #e0f2e9; /* light green hue */
 }
 
-/* Modal common styles */
+#gameContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Modal styles */
 .modal {
   position: fixed;
   top: 0;
@@ -20,6 +26,7 @@ body, html {
   align-items: center;
   justify-content: center;
 }
+
 .modal-content {
   background-color: #fff;
   padding: 20px;
@@ -27,18 +34,13 @@ body, html {
   text-align: center;
 }
 
-/* Game container styles */
-#gameContainer {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
 /* Canvas container */
 #canvasContainer {
   position: relative;
   background-color: #fff;
 }
+
+/* Canvas styling */
 #drawCanvas {
   display: block;
   width: 100%;
@@ -58,7 +60,22 @@ body, html {
   border-radius: 5px;
 }
 
-/* Draw controls */
+/* Brush thickness buttons */
+#brushThickness button {
+  margin: 0 2px;
+}
+
+/* Brush color buttons */
+#brushColors button {
+  margin: 0 2px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Draw controls (Undo, Clear, Give Up) */
 #drawControls {
   position: absolute;
   top: 5px;
@@ -79,6 +96,7 @@ body, html {
   align-items: center;
   justify-content: center;
 }
+
 #turnPrompt #turnMessage {
   background: rgba(255,255,255,0.9);
   padding: 10px;
@@ -87,7 +105,7 @@ body, html {
 }
 
 /* Draw phase countdown display */
-.drawCountdown {
+#drawCountdown {
   position: absolute;
   top: 5px;
   right: 5px;
@@ -99,18 +117,20 @@ body, html {
   display: none;
 }
 
-/* Box container (chat and players) */
+/* Box container for chat/players */
 #boxContainer {
   flex: 1;
-  background-color: #c8e6c9;
+  background-color: #c8e6c9; /* lighter green */
   display: flex;
   flex-direction: column;
 }
+
 #boxHeader {
   display: flex;
   justify-content: flex-end;
   padding: 5px;
 }
+
 #toggleBox {
   background-color: #4caf50;
   color: white;
@@ -119,14 +139,16 @@ body, html {
   border-radius: 5px;
   cursor: pointer;
 }
+
 #boxContent {
   flex: 1;
   overflow-y: auto;
   padding: 5px;
   background-color: #a5d6a7;
 }
+
 .boxView {
-  font-size: 16px;
+  font-size: 16px; /* fixed font size for messages and players */
 }
 
 /* Chat input area */
@@ -135,12 +157,14 @@ body, html {
   padding: 5px;
   background-color: #81c784;
 }
+
 #chatInput {
   flex: 1;
   padding: 5px;
   border: none;
   border-radius: 4px;
 }
+
 #sendChat {
   background-color: #388e3c;
   color: white;
