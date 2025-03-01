@@ -2,7 +2,7 @@ const socket = io();
 
 // DOM Elements
 let nicknamePrompt, nicknameInput, joinBtn;
-let gameContainer;
+let gameContainer, rightContainer;
 let countdownOverlay;
 let decisionButtons, drawBtn, skipBtn;
 let drawingTools, colorSelect, thicknessSelect, undoBtn, clearBtn, giveUpBtn;
@@ -25,7 +25,7 @@ let drawing = false;
 let pathPoints = [];
 let lastX, lastY;
 
-// Strokes from server for re-draw
+// Strokes from server
 let strokes = [];
 let countdownInterval = null;
 
@@ -33,35 +33,36 @@ window.addEventListener('load', () => {
   nicknamePrompt = document.getElementById('nicknamePrompt');
   nicknameInput = document.getElementById('nicknameInput');
   joinBtn = document.getElementById('joinBtn');
-
+  
   gameContainer = document.getElementById('gameContainer');
+  rightContainer = document.getElementById('rightContainer');
   countdownOverlay = document.getElementById('countdownOverlay');
-
+  
   decisionButtons = document.getElementById('decisionButtons');
   drawBtn = document.getElementById('drawBtn');
   skipBtn = document.getElementById('skipBtn');
-
+  
   drawingTools = document.getElementById('drawingTools');
   colorSelect = document.getElementById('colorSelect');
   thicknessSelect = document.getElementById('thicknessSelect');
   undoBtn = document.getElementById('undoBtn');
   clearBtn = document.getElementById('clearBtn');
   giveUpBtn = document.getElementById('giveUpBtn');
-
+  
   toggleBtn = document.getElementById('toggleBtn');
-
+  
   myCanvas = document.getElementById('myCanvas');
   ctx = myCanvas.getContext('2d');
-
+  
   chatBox = document.getElementById('chatBox');
   playersBox = document.getElementById('playersBox');
   chatInput = document.getElementById('chatInput');
   chatSendBtn = document.getElementById('chatSendBtn');
-
+  
   // Hide main container initially
   gameContainer.style.display = 'none';
-
-  // Adjust canvas size to match its container (so the internal coordinate system matches)
+  
+  // Adjust canvas size to match its container
   function adjustCanvasSize() {
     const canvasWrapper = document.getElementById('canvasWrapper');
     myCanvas.width = canvasWrapper.clientWidth;
@@ -70,7 +71,7 @@ window.addEventListener('load', () => {
   }
   window.addEventListener('resize', adjustCanvasSize);
   adjustCanvasSize();
-
+  
   // Nickname join
   joinBtn.addEventListener('click', () => {
     const name = nicknameInput.value.trim();
@@ -82,20 +83,24 @@ window.addEventListener('load', () => {
       adjustCanvasSize();
     }
   });
-
-  // Toggle between Chat and Players view in the bottom section
+  
+  // Toggle between Chat and Players view
   toggleBtn.addEventListener('click', () => {
     if (chatBox.style.display !== 'none') {
+      // Switch to Players view
       chatBox.style.display = 'none';
       playersBox.style.display = 'block';
+      document.getElementById('bottomHeader').textContent = 'Player Box';
       toggleBtn.textContent = 'Show Messages';
     } else {
+      // Switch to Chat view
       chatBox.style.display = 'block';
       playersBox.style.display = 'none';
+      document.getElementById('bottomHeader').textContent = 'Message Box';
       toggleBtn.textContent = 'Show Players';
     }
   });
-
+  
   // Typing mode: adjust layout when chat input is focused
   chatInput.addEventListener('focus', () => {
     gameContainer.classList.add('typing');
@@ -105,7 +110,7 @@ window.addEventListener('load', () => {
     gameContainer.classList.remove('typing');
     adjustCanvasSize();
   });
-
+  
   // Decision buttons
   drawBtn.addEventListener('click', () => {
     socket.emit('drawChoice', 'draw');
@@ -113,7 +118,7 @@ window.addEventListener('load', () => {
   skipBtn.addEventListener('click', () => {
     socket.emit('drawChoice', 'skip');
   });
-
+  
   // Drawing tools
   colorSelect.addEventListener('change', (e) => {
     currentColor = e.target.value;
@@ -130,7 +135,7 @@ window.addEventListener('load', () => {
   giveUpBtn.addEventListener('click', () => {
     socket.emit('giveUp');
   });
-
+  
   // Mouse drawing events
   myCanvas.addEventListener('mousedown', (e) => {
     if (!amICurrentDrawer || !isDrawingPhase) return;
@@ -154,7 +159,7 @@ window.addEventListener('load', () => {
       endDrawing();
     }
   });
-
+  
   // Touch drawing events
   myCanvas.addEventListener('touchstart', (e) => {
     if (!amICurrentDrawer || !isDrawingPhase) return;
@@ -174,7 +179,7 @@ window.addEventListener('load', () => {
       endDrawing();
     }
   }, { passive: false });
-
+  
   function startDrawing(clientX, clientY) {
     drawing = true;
     pathPoints = [];
@@ -203,7 +208,7 @@ window.addEventListener('load', () => {
       thickness: currentThickness
     });
   }
-
+  
   // Chat message sending
   chatSendBtn.addEventListener('click', sendChatMessage);
   chatInput.addEventListener('keydown', (e) => {
@@ -216,9 +221,8 @@ window.addEventListener('load', () => {
       chatInput.value = '';
     }
   }
-
-  /* ======================== SOCKET EVENTS ======================== */
   
+  /* SOCKET EVENTS */
   socket.on('initCanvas', (allStrokes) => {
     strokes = allStrokes;
     redrawCanvas();
@@ -227,16 +231,13 @@ window.addEventListener('load', () => {
     chatBox.innerHTML = '';
     messages.forEach((msg) => appendChat(msg.username, msg.text));
   });
-  
   socket.on('partialDrawing', ({ fromX, fromY, toX, toY, color, thickness }) => {
     drawSegment(fromX, fromY, toX, toY, color || 'black', thickness || 1, 0.4);
   });
-  
   socket.on('strokeComplete', (stroke) => {
     strokes.push(stroke);
     drawStroke(stroke);
   });
-  
   socket.on('removeStroke', (strokeId) => {
     const idx = strokes.findIndex(s => s.strokeId === strokeId);
     if (idx !== -1) {
@@ -244,16 +245,13 @@ window.addEventListener('load', () => {
       redrawCanvas();
     }
   });
-  
   socket.on('clearCanvas', () => {
     strokes = [];
     redrawCanvas();
   });
-  
   socket.on('chatMessage', (msg) => {
     appendChat(msg.username, msg.text);
   });
-  
   socket.on('playersList', (players) => {
     playersBox.innerHTML = '';
     players.forEach((p) => {
@@ -275,7 +273,6 @@ window.addEventListener('load', () => {
       playersBox.appendChild(div);
     });
   });
-  
   socket.on('turnInfo', (data) => {
     const { currentPlayerId, currentPlayerName, isDrawingPhase: drawingPhase, timeLeft } = data;
     amICurrentDrawer = (socket.id === currentPlayerId);
@@ -296,29 +293,20 @@ window.addEventListener('load', () => {
       decisionButtons.style.display = 'none';
       drawingTools.style.display = 'block';
       countdownOverlay.style.display = 'none';
-      startCountdown(timeLeft, (remaining) => {
-        // Optional: update if needed
-      });
+      startCountdown(timeLeft, (remaining) => {});
     } else {
       decisionButtons.style.display = 'none';
       drawingTools.style.display = 'none';
       countdownOverlay.style.display = 'none';
-      startCountdown(timeLeft, (remaining) => {
-        // Optional update for observers
-      });
+      startCountdown(timeLeft, (remaining) => {});
     }
   });
   
-  /* ======================= HELPER FUNCTIONS ======================= */
-  
+  /* HELPER FUNCTIONS */
   function getCanvasCoords(clientX, clientY) {
     const rect = myCanvas.getBoundingClientRect();
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
-    };
+    return { x: clientX - rect.left, y: clientY - rect.top };
   }
-  
   function drawSegment(x1, y1, x2, y2, strokeStyle, thickness, alpha = 1.0) {
     ctx.save();
     ctx.strokeStyle = strokeStyle;
@@ -330,7 +318,6 @@ window.addEventListener('load', () => {
     ctx.stroke();
     ctx.restore();
   }
-  
   function drawStroke(stroke) {
     const { path, color, thickness } = stroke;
     if (!path || path.length < 2) return;
@@ -348,19 +335,16 @@ window.addEventListener('load', () => {
     ctx.stroke();
     ctx.restore();
   }
-  
   function redrawCanvas() {
     ctx.clearRect(0, 0, myCanvas.width, myCanvas.height);
     strokes.forEach(s => drawStroke(s));
   }
-  
   function appendChat(user, text) {
     const div = document.createElement('div');
     div.textContent = `${user}: ${text}`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
   }
-  
   function startCountdown(total, onTick) {
     let secondsLeft = total;
     updateCountdown(secondsLeft);
@@ -374,12 +358,10 @@ window.addEventListener('load', () => {
       }
     }, 1000);
   }
-  
   function stopCountdown() {
     if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = null;
   }
-  
   function updateCountdown(num) {
     countdownOverlay.textContent = num + 's';
   }

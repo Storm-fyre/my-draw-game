@@ -4,14 +4,13 @@
   <meta charset="utf-8" />
   <title>Colorful Draw Game</title>
   <style>
-    /* Basic reset */
+    /* Reset & Basic Styles */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; width: 100%; }
     body {
       font-family: "Comic Sans MS", cursive, sans-serif;
       background: linear-gradient(135deg, #ffe6e6, #e6f7ff);
     }
-    
     #topBar {
       background-color: #ff99cc;
       padding: 10px;
@@ -19,8 +18,8 @@
       font-size: 1.4em;
       color: white;
     }
-    
-    /* Nickname prompt */
+
+    /* Nickname Prompt */
     #nicknamePrompt {
       display: flex;
       justify-content: center;
@@ -52,22 +51,32 @@
     #nicknamePromptContent button:hover {
       background: #fa49bd;
     }
-    
-    /* Game container (portrait mode only for now) */
+
+    /* Main Game Container (Portrait Mode Only) */
     #gameContainer {
       display: flex;
       flex-direction: column;
-      height: calc(100% - 50px); /* accounting for topBar */
+      height: calc(100% - 50px); /* Account for topBar */
       width: 100%;
     }
-    
+    /* When keyboard is on (typing mode), layout becomes horizontal */
+    #gameContainer.typing { flex-direction: row; }
+
     /* Canvas Section */
     #canvasSection {
       width: 100%;
-      /* Ensure canvas is always square */
-      aspect-ratio: 1;
       position: relative;
       border: 1px solid black;
+      /* In normal mode, ensure the canvas is square */
+      aspect-ratio: 1;
+    }
+    /* In typing mode, canvas is on the left, remains square, and fills available height */
+    #gameContainer.typing #canvasSection {
+      height: 100%;
+      width: auto;
+      aspect-ratio: 1;
+      border-right: 1px solid black;
+      border-bottom: none;
     }
     #canvasWrapper {
       width: 100%;
@@ -79,7 +88,7 @@
       height: 100%;
       display: block;
     }
-    /* Countdown overlay in canvas (centered) */
+    /* Countdown overlay (centered in canvas) */
     #countdownOverlay {
       position: absolute;
       top: 50%;
@@ -89,7 +98,17 @@
       color: red;
       display: none;
     }
-    
+
+    /* Right Container:
+       In normal mode, it stacks below the canvas.
+       In typing mode, it appears to the right of the canvas.
+    */
+    #rightContainer {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
     /* Toolbar Section */
     #toolbar {
       display: flex;
@@ -103,8 +122,8 @@
       align-items: center;
       gap: 10px;
     }
-    /* Style for select menus and buttons */
-    #leftTools select, #leftTools button,
+    #leftTools select,
+    #leftTools button,
     #toggleContainer button {
       padding: 5px;
       border: 1px solid #ccc;
@@ -113,27 +132,35 @@
       color: white;
       cursor: pointer;
     }
-    
-    /* Decision buttons and drawing tools – shown conditionally */
-    #decisionButtons, #drawingTools {
-      display: none;
-    }
-    
-    /* Bottom Section (message/players area) */
+    /* Hide decision and drawing tools by default */
+    #decisionButtons, #drawingTools { display: none; }
+
+    /* Bottom Section (Message/Player Box) */
     #bottomSection {
       flex: 1;
       display: flex;
       flex-direction: column;
       border: 1px solid black;
     }
-    #chatBox, #playersBox {
+    /* Header for bottom section */
+    #bottomHeader {
+      padding: 5px;
+      background: #ff99cc;
+      color: white;
+      font-weight: bold;
+      text-align: center;
+    }
+    /* Content area (scrollable) */
+    #bottomContent {
       flex: 1;
       overflow-y: auto;
       padding: 10px;
-      border-bottom: 1px solid black;
     }
-    /* Initially, show chatBox and hide playersBox */
-    #playersBox { display: none; }
+    /* Chat box and players box */
+    #chatBox, #playersBox { display: none; }
+    /* By default, show chatBox */
+    #chatBox { display: block; }
+    /* Input Section */
     #chatInputSection {
       display: flex;
       padding: 5px;
@@ -154,36 +181,15 @@
       color: white;
       cursor: pointer;
     }
-    
-    /* Toggle container (for switching between messages and players) */
-    #toggleContainer { }
-    
-    /* Typing mode (when keyboard is on screen): horizontal layout */
-    #gameContainer.typing {
-      flex-direction: row;
-    }
-    /* In typing mode, the canvas remains square on the left */
-    #gameContainer.typing #canvasSection {
-      height: 100%;
-      width: auto;
-      aspect-ratio: 1;
-      border-right: 1px solid black;
-      border-bottom: none;
-    }
-    /* The right side will stack the toolbar and bottom section */
+
+    /* In typing mode, the right container (toolbar + bottomSection) fills available space */
     #gameContainer.typing #toolbar,
-    #gameContainer.typing #bottomSection {
-      flex: 1;
-      flex-direction: column;
-    }
-    #gameContainer.typing #toolbar {
-      border-bottom: 1px solid black;
-    }
+    #gameContainer.typing #bottomSection { flex: 1; }
   </style>
 </head>
 <body>
   <div id="topBar">Draw Game: Colorful Edition</div>
-
+  
   <!-- Nickname Prompt -->
   <div id="nicknamePrompt">
     <div id="nicknamePromptContent">
@@ -192,7 +198,7 @@
       <button id="joinBtn">Join</button>
     </div>
   </div>
-
+  
   <!-- Main Game Container -->
   <div id="gameContainer" style="display: none;">
     <!-- Canvas Section -->
@@ -202,65 +208,69 @@
         <div id="countdownOverlay">10</div>
       </div>
     </div>
-    <!-- Toolbar Section -->
-    <div id="toolbar">
-      <div id="leftTools">
-        <div id="decisionButtons">
-          <button id="drawBtn">Draw</button>
-          <button id="skipBtn">Skip</button>
+    <!-- Right Container (Toolbar & Bottom Section) -->
+    <div id="rightContainer">
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <div id="leftTools">
+          <div id="decisionButtons">
+            <button id="drawBtn">Draw</button>
+            <button id="skipBtn">Skip</button>
+          </div>
+          <div id="drawingTools">
+            <select id="colorSelect">
+              <option value="#000000">Black</option>
+              <option value="#ffffff">White</option>
+              <option value="#ff0000">Red</option>
+              <option value="#00ff00">Green</option>
+              <option value="#0000ff">Blue</option>
+              <option value="#ffff00">Yellow</option>
+              <option value="#ffa500">Orange</option>
+              <option value="#800080">Purple</option>
+              <option value="#00ffff">Cyan</option>
+              <option value="#ff00ff">Magenta</option>
+              <option value="#808080">Gray</option>
+              <option value="#8B4513">Brown</option>
+              <option value="#FFC0CB">Pink</option>
+              <option value="#000080">Navy</option>
+              <option value="#008080">Teal</option>
+              <option value="#FFD700">Gold</option>
+              <option value="#C0C0C0">Silver</option>
+              <option value="#A52A2A">Maroon</option>
+            </select>
+            <select id="thicknessSelect">
+              <option value="1">1px</option>
+              <option value="2">2px</option>
+              <option value="4">4px</option>
+              <option value="6">6px</option>
+              <option value="8">8px</option>
+              <option value="10">10px</option>
+            </select>
+            <button id="undoBtn">Undo</button>
+            <button id="clearBtn">Clear</button>
+            <button id="giveUpBtn">Give Up</button>
+          </div>
         </div>
-        <div id="drawingTools">
-          <select id="colorSelect">
-            <option value="#000000">Black</option>
-            <option value="#ffffff">White</option>
-            <option value="#ff0000">Red</option>
-            <option value="#00ff00">Green</option>
-            <option value="#0000ff">Blue</option>
-            <option value="#ffff00">Yellow</option>
-            <option value="#ffa500">Orange</option>
-            <option value="#800080">Purple</option>
-            <option value="#00ffff">Cyan</option>
-            <option value="#ff00ff">Magenta</option>
-            <option value="#808080">Gray</option>
-            <option value="#8B4513">Brown</option>
-            <option value="#FFC0CB">Pink</option>
-            <option value="#000080">Navy</option>
-            <option value="#008080">Teal</option>
-            <option value="#FFD700">Gold</option>
-            <option value="#C0C0C0">Silver</option>
-            <option value="#A52A2A">Maroon</option>
-          </select>
-          <select id="thicknessSelect">
-            <option value="1">1px</option>
-            <option value="2">2px</option>
-            <option value="4">4px</option>
-            <option value="6">6px</option>
-            <option value="8">8px</option>
-            <option value="10">10px</option>
-          </select>
-          <button id="undoBtn">Undo</button>
-          <button id="clearBtn">Clear</button>
-          <button id="giveUpBtn">Give Up</button>
+        <div id="toggleContainer">
+          <button id="toggleBtn">Show Players</button>
         </div>
       </div>
-      <div id="toggleContainer">
-        <button id="toggleBtn">Show Players</button>
-      </div>
-    </div>
-    <!-- Bottom Section (Message/Players) -->
-    <div id="bottomSection">
-      <div id="chatBox"></div>
-      <div id="playersBox"></div>
-      <div id="chatInputSection">
-        <input id="chatInput" placeholder="Say something nice..." />
-        <button id="chatSendBtn">Send</button>
+      <!-- Bottom Section -->
+      <div id="bottomSection">
+        <div id="bottomHeader">Message Box</div>
+        <div id="bottomContent">
+          <div id="chatBox"></div>
+          <div id="playersBox"></div>
+        </div>
+        <div id="chatInputSection">
+          <input id="chatInput" placeholder="Say something nice..." />
+          <button id="chatSendBtn">Send</button>
+        </div>
       </div>
     </div>
   </div>
-
-  <!-- Socket.IO -->
+  
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Client Script -->
   <script src="client.js"></script>
 </body>
 </html>
