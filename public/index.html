@@ -33,6 +33,7 @@
         </div>
         <div id="brushColors">
           <span>Colors:</span>
+          <!-- 18 basic colours -->
           <button class="color" data-color="#000000" style="background:#000000;"></button>
           <button class="color" data-color="#808080" style="background:#808080;"></button>
           <button class="color" data-color="#C0C0C0" style="background:#C0C0C0;"></button>
@@ -59,11 +60,14 @@
         <button id="clearBtn">Clear</button>
         <button id="giveUpBtn">Give Up</button>
       </div>
-      <!-- Turn prompt overlay for object selection -->
+      <!-- Turn prompt overlay (used for object selection in decision phase) -->
       <div id="turnPrompt">
         <div id="turnMessage">
-          <p id="promptText"></p>
-          <div id="countdownDisplay"></div>
+          <p id="promptText">Your turn! Choose an object:</p>
+          <div id="turnOptions">
+            <!-- Three buttons will be dynamically inserted here -->
+          </div>
+          <div id="countdownDisplay">10</div>
         </div>
       </div>
       <!-- Draw phase countdown display at top right of canvas -->
@@ -77,9 +81,13 @@
       </div>
       <div id="boxContent">
         <!-- Chat view -->
-        <div id="chatBox" class="boxView"></div>
+        <div id="chatBox" class="boxView">
+          <!-- Chat messages will be appended here -->
+        </div>
         <!-- Players list view -->
-        <div id="playerBox" class="boxView" style="display:none;"></div>
+        <div id="playerBox" class="boxView" style="display:none;">
+          <!-- Player names and scores will be appended here -->
+        </div>
       </div>
       <!-- Chat input area -->
       <div id="chatInputContainer">
