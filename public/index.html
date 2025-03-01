@@ -74,29 +74,24 @@
       border: 1px solid black;
       border-bottom: none;
       display: flex;
-      flex-direction: column;
-    }
-    /* Controls above canvas (turn info, buttons, tools, countdown) */
-    #canvasControls {
-      padding: 5px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
       justify-content: center;
+      align-items: center;
     }
-    #canvasControls > * {
-      margin: 5px;
-    }
-    /* Canvas wrapper to fill the remaining space */
+    /* Canvas Wrapper */
     #canvasWrapper {
-      flex: 1;
-      position: relative;
-    }
-    #canvasWrapper, #myCanvas {
+      display: flex;
+      justify-content: center;
+      align-items: center;
       width: 100%;
       height: 100%;
     }
+    /* Canvas styling: always square */
     #myCanvas {
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+      max-height: 100%;
+      aspect-ratio: 1 / 1;
       border: 1px solid black;
       display: block;
     }
@@ -163,7 +158,6 @@
     
     /* Portrait mode – default layout (keyboard not active) */
     /* Canvas on top (60%) and bottom info split horizontally (70% messages, 30% players) */
-    /* When keyboard is not active, #gameContainer has no extra class */
     
     /* Portrait mode when typing: add "typing" class to #gameContainer */
     #gameContainer.typing {
@@ -173,6 +167,9 @@
       flex: 3; /* roughly 75% width */
       border-right: 1px solid black;
       border-bottom: 1px solid black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
     #gameContainer.typing #infoSection {
       flex: 1; /* roughly 25% width */
@@ -192,6 +189,9 @@
         flex: 3; /* 75% width */
         border-right: 1px solid black;
         border-bottom: 1px solid black;
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
       #infoSection {
         flex: 1; /* 25% width */
@@ -223,52 +223,6 @@
   <div id="gameContainer" style="display: none;">
     <!-- Canvas Section -->
     <div id="canvasSection">
-      <div id="canvasControls">
-        <div id="turnInfo">Waiting for players...</div>
-        <div id="decisionButtons" style="display:none;">
-          <button id="drawBtn">Draw</button>
-          <button id="skipBtn">Skip</button>
-        </div>
-        <div id="drawingTools" style="display:none;">
-          <select id="colorSelect">
-            <option value="#000000">Black</option>
-            <option value="#ffffff">White</option>
-            <option value="#ff0000">Red</option>
-            <option value="#00ff00">Green</option>
-            <option value="#0000ff">Blue</option>
-            <option value="#ffff00">Yellow</option>
-            <option value="#ffa500">Orange</option>
-            <option value="#800080">Purple</option>
-            <option value="#00ffff">Cyan</option>
-            <option value="#ff00ff">Magenta</option>
-            <option value="#808080">Gray</option>
-            <option value="#8B4513">Brown</option>
-            <option value="#FFC0CB">Pink</option>
-            <option value="#000080">Navy</option>
-            <option value="#008080">Teal</option>
-            <option value="#FFD700">Gold</option>
-            <option value="#C0C0C0">Silver</option>
-            <option value="#A52A2A">Maroon</option>
-          </select>
-          <select id="thicknessSelect">
-            <option value="1">1px</option>
-            <option value="2">2px</option>
-            <option value="4">4px</option>
-            <option value="6">6px</option>
-            <option value="8">8px</option>
-            <option value="10">10px</option>
-          </select>
-          <button id="undoBtn">Undo</button>
-          <button id="clearBtn">Clear</button>
-          <button id="giveUpBtn">Give Up</button>
-        </div>
-        <div id="countdownContainer">
-          <div id="countdownBar" style="display:none;">
-            <div id="countdownFill"></div>
-          </div>
-          <div id="countdownNumber" style="display:none;">0</div>
-        </div>
-      </div>
       <div id="canvasWrapper">
         <canvas id="myCanvas"></canvas>
       </div>

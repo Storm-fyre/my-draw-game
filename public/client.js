@@ -63,11 +63,14 @@ window.addEventListener('load', () => {
   // Hide main container initially
   gameContainer.style.display = 'none';
 
-  // Adjust canvas internal resolution to match its displayed size
+  // Adjust canvas size: make it square based on the available space in #canvasWrapper.
   function adjustCanvasSize() {
     const canvasWrapper = document.getElementById('canvasWrapper');
-    myCanvas.width = canvasWrapper.clientWidth;
-    myCanvas.height = canvasWrapper.clientHeight;
+    const availableWidth = canvasWrapper.clientWidth;
+    const availableHeight = canvasWrapper.clientHeight;
+    const size = Math.min(availableWidth, availableHeight);
+    myCanvas.width = size;
+    myCanvas.height = size;
     redrawCanvas();
   }
   window.addEventListener('resize', adjustCanvasSize);
@@ -90,9 +93,11 @@ window.addEventListener('load', () => {
   // Adjust layout when the chat input is focused (typing mode)
   chatInput.addEventListener('focus', () => {
     gameContainer.classList.add('typing');
+    adjustCanvasSize(); // Re-adjust in case container changes
   });
   chatInput.addEventListener('blur', () => {
     gameContainer.classList.remove('typing');
+    adjustCanvasSize(); // Re-adjust in case container changes
   });
 
   // Decision buttons
