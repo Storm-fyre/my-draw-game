@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const objects = require('./objects.json');
-const lobbiesData = require('./lobbies.json');
+const lobbiesConfig = require('./lobbies.json');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,27 +12,29 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
-// Global games object to maintain per‑lobby game state.
-const games = {}; 
-/*
-Each game state has the structure:
-{
-  players: { [socket.id]: { nickname, score } },
-  playerOrder: [socket.id, ...],
-  chatMessages: [],
-  currentDrawer: socket.id,
-  currentObject: string,
-  guessedCorrectly: { [socket.id]: true },
-  turnTimer: interval reference,
-  roundPhase: "selection" | "drawing" | "leaderboard",
-  currentDrawTimeLeft: number
+// Temporary storage for players who have set a nickname but not yet joined a lobby.
+ 
+// We also maintain a global object "lobbies" to store per–lobby state.
+let lobbies = {}; // key: lobbyName, value: { players, playerOrder, chatMessages, currentDrawer, turnTimer, currentObject, guessedCorrectly, currentDrawTimeLeft }
+
+// Helper: Get or create a lobby object.
+function getLobby(lobbyName) {
+  if (!lobbies[lobbyName]) {
+    lobbies[lobbyName] = {
+      players: {},          // { socket.id: { nickname, score } }
+      playerOrder: [],      // [ socket.id, ... ]
+      chatMessages: [],     // last 15 messages
+      currentDrawer: null,  // socket.id of current drawer
+      turnTimer: null,
+      currentObject: null,
+      guessedCorrectly: {},
+      currentDrawTimeLeft: 0
+    };
+  }
+  return lobbies[lobbyName];
 }
-*/
 
-const DECISION_DURATION = 10; // seconds for object selection phase
-const DRAW_DURATION = 70;     // seconds for drawing phase
-
-// Helper: Compute Levenshtein distance between two strings.
+// Levenshtein distance and similarity functions
 function getLevenshteinDistance(a, b) {
   const matrix = [];
   const aLen = a.length;
@@ -59,17 +61,16 @@ function getLevenshteinDistance(a, b) {
   return matrix[bLen][aLen];
 }
 
-// Helper: Returns similarity percentage (0–100) between two strings.
 function similarity(str1, str2) {
   str1 = str1.toLowerCase().trim();
   str2 = str2.toLowerCase().trim();
   const distance = getLevenshteinDistance(str1, str2);
   const maxLen = Math.max(str1.length, str2.length);
   if (maxLen === 0) return 100;
-  return (1 - distance / maxLen) * 100;
+  return ((1 - distance / maxLen) * 100);
 }
 
-// Helper: Get n random objects (without duplicates) from objects.json.
+// Get n random objects from the list (no duplicates)
 function getRandomObjects(n) {
   let shuffled = objects.slice();
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -79,253 +80,196 @@ function getRandomObjects(n) {
   return shuffled.slice(0, n);
 }
 
-// Start a new turn (object selection phase) for a given lobby.
-function startNextTurn(lobby) {
-  const game = games[lobby];
-  if (!game) return;
-  if (game.turnTimer) {
-    clearInterval(game.turnTimer);
-    game.turnTimer = null;
-  }
-  // Clear the canvas for the lobby.
-  io.to(lobby).emit('clearCanvas');
-  // Reset round state.
-  game.currentObject = null;
-  game.guessedCorrectly = {};
-  game.roundPhase = "selection";
+// Start a new turn in the given lobby (object selection phase)
+function startNextTurn(lobbyName) {
+  let lobby = getLobby(lobbyName);
+  // Clear the canvas for all players in this lobby
+  io.to(lobbyName).emit('clearCanvas');
+  // Reset round state
+  lobby.currentObject = null;
+  lobby.guessedCorrectly = {};
   
-  // Choose the next drawer.
-  if (game.playerOrder.length === 0) {
-    game.currentDrawer = null;
+  if (lobby.playerOrder.length === 0) {
+    lobby.currentDrawer = null;
     return;
   }
-  let currentIndex = game.playerOrder.indexOf(game.currentDrawer);
-  if (currentIndex === -1 || currentIndex === game.playerOrder.length - 1) {
-    game.currentDrawer = game.playerOrder[0];
+  let currentIndex = lobby.playerOrder.indexOf(lobby.currentDrawer);
+  if (currentIndex === -1 || currentIndex === lobby.playerOrder.length - 1) {
+    lobby.currentDrawer = lobby.playerOrder[0];
   } else {
-    game.currentDrawer = game.playerOrder[currentIndex + 1];
+    lobby.currentDrawer = lobby.playerOrder[currentIndex + 1];
   }
-  // Inform lobby players about the new turn.
-  io.to(lobby).emit('turnStarted', { currentDrawer: game.currentDrawer, duration: DECISION_DURATION });
-  // Send three random object options only to the current drawer.
+  // Inform players in the lobby of the new turn (object selection phase)
+  io.to(lobbyName).emit('turnStarted', { currentDrawer: lobby.currentDrawer, duration: 10 });
   const options = getRandomObjects(3);
-  io.to(game.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-  let timeLeft = DECISION_DURATION;
-  game.turnTimer = setInterval(() => {
+  io.to(lobby.currentDrawer).emit('objectSelection', { options, duration: 10 });
+  
+  let timeLeft = 10;
+  lobby.turnTimer = setInterval(() => {
     timeLeft--;
-    io.to(lobby).emit('turnCountdown', timeLeft);
+    io.to(lobbyName).emit('turnCountdown', timeLeft);
     if (timeLeft <= 0) {
-      clearInterval(game.turnTimer);
-      game.turnTimer = null;
-      io.to(game.currentDrawer).emit('turnTimeout');
-      startNextTurn(lobby);
+      clearInterval(lobby.turnTimer);
+      lobby.turnTimer = null;
+      io.to(lobby.currentDrawer).emit('turnTimeout');
+      startNextTurn(lobbyName);
     }
   }, 1000);
-}
-
-// End the current round: show the leaderboard for 10 seconds, then start next turn.
-function endRound(lobby) {
-  const game = games[lobby];
-  if (!game) return;
-  if (game.turnTimer) {
-    clearInterval(game.turnTimer);
-    game.turnTimer = null;
-  }
-  const leaderboardData = Object.values(game.players).map(p => ({ nickname: p.nickname, score: p.score }));
-  io.to(lobby).emit('leaderboard', leaderboardData);
-  setTimeout(() => {
-    io.to(lobby).emit('clearCanvas');
-    startNextTurn(lobby);
-  }, 10000);
 }
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
   
-  // 'joinGame' event: client sends { nickname, lobby, passcode }.
-  socket.on('joinGame', (data) => {
-    const { nickname, lobby, passcode } = data;
-    // Validate lobby credentials from lobbies.json.
-    const validLobby = lobbiesData.find(item => item.lobby === lobby && item.passcode === passcode);
-    if (!validLobby) {
-      socket.emit('lobbyError', 'Invalid lobby or passcode');
+  // First, the client sends 'setNickname'
+  socket.on('setNickname', (nickname) => {
+    socket.nickname = nickname;
+    // Send the available lobbies (from lobbiesConfig) to the client.
+    socket.emit('lobbiesList', lobbiesConfig);
+  });
+  
+  // Next, the client sends 'joinLobby' with chosen lobby and passcode.
+  socket.on('joinLobby', ({ lobbyName, passcode }) => {
+    const lobbyConfig = lobbiesConfig.find(l => l.name === lobbyName);
+    if (!lobbyConfig) {
+      socket.emit('lobbyError', "Lobby not found.");
       return;
     }
-    socket.join(lobby);
-    socket.lobby = lobby;
-    // Initialize game state for this lobby if needed.
-    if (!games[lobby]) {
-      games[lobby] = {
-        players: {},
-        playerOrder: [],
-        chatMessages: [],
-        currentDrawer: null,
-        currentObject: null,
-        guessedCorrectly: {},
-        turnTimer: null,
-        roundPhase: "selection",
-        currentDrawTimeLeft: DRAW_DURATION
-      };
+    if (lobbyConfig.passcode !== passcode) {
+      socket.emit('lobbyError', "Incorrect passcode.");
+      return;
     }
-    const game = games[lobby];
-    game.players[socket.id] = { nickname, score: 0 };
-    game.playerOrder.push(socket.id);
-    
-    // Send initial game data to this client.
+    // Join the lobby room.
+    socket.join(lobbyName);
+    socket.lobbyName = lobbyName;
+    let lobby = getLobby(lobbyName);
+    // Add player to the lobby players list.
+    lobby.players[socket.id] = { nickname: socket.nickname, score: 0 };
+    lobby.playerOrder.push(socket.id);
+    // Send initial data to this player.
     socket.emit('init', {
-      players: Object.values(game.players).map(p => ({ nickname: p.nickname, score: p.score })),
-      chatMessages: game.chatMessages
+      players: Object.values(lobby.players),
+      chatMessages: lobby.chatMessages
     });
-    io.to(lobby).emit('updatePlayers', Object.values(game.players).map(p => ({ nickname: p.nickname, score: p.score })));
-    
-    // If no current drawer exists, start the turn.
-    if (!game.currentDrawer) {
-      game.currentDrawer = socket.id;
-      io.to(lobby).emit('turnStarted', { currentDrawer: game.currentDrawer, duration: DECISION_DURATION });
-      const options = getRandomObjects(3);
-      io.to(game.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-      let timeLeft = DECISION_DURATION;
-      game.turnTimer = setInterval(() => {
-        timeLeft--;
-        io.to(lobby).emit('turnCountdown', timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(game.turnTimer);
-          game.turnTimer = null;
-          io.to(game.currentDrawer).emit('turnTimeout');
-          startNextTurn(lobby);
-        }
-      }, 1000);
+    // Update all players in this lobby.
+    io.to(lobbyName).emit('updatePlayers', Object.values(lobby.players));
+    // If no turn is active, start one.
+    if (!lobby.currentDrawer) {
+      startNextTurn(lobbyName);
     }
   });
   
-  // When the current drawer chooses an object.
-  socket.on('objectChosen', (objectChosen) => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    if (socket.id === game.currentDrawer && !game.currentObject) {
-      if (game.turnTimer) {
-        clearInterval(game.turnTimer);
-        game.turnTimer = null;
-      }
-      game.currentObject = objectChosen;
-      game.roundPhase = "drawing";
-      game.guessedCorrectly = {};
-      let timeLeft = DRAW_DURATION;
-      io.to(lobby).emit('drawPhaseStarted', { currentDrawer: game.currentDrawer, duration: DRAW_DURATION });
-      game.turnTimer = setInterval(() => {
-        timeLeft--;
-        game.currentDrawTimeLeft = timeLeft;
-        io.to(lobby).emit('drawPhaseCountdown', timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(game.turnTimer);
-          game.turnTimer = null;
-          io.to(game.currentDrawer).emit('drawPhaseTimeout');
-          endRound(lobby);
-        }
-      }, 1000);
-    }
-  });
-  
-  // Chat messages (and guess checking during drawing phase).
+  // Chat messages (and checking guesses in drawing phase)
   socket.on('chatMessage', (message) => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    // If in drawing phase and sender is not the drawer, check the guess.
-    if (game.currentObject && socket.id !== game.currentDrawer && game.roundPhase === "drawing") {
-      if (!game.guessedCorrectly[socket.id]) {
+    if (!socket.lobbyName) return;
+    let lobby = getLobby(socket.lobbyName);
+    // If in drawing phase and the sender is not the drawer, check the guess.
+    if (lobby.currentObject && socket.id !== lobby.currentDrawer) {
+      if (!lobby.guessedCorrectly[socket.id]) {
         const guess = message.trim().toLowerCase();
-        const answer = game.currentObject.trim().toLowerCase();
+        const answer = lobby.currentObject.trim().toLowerCase();
         const sim = similarity(guess, answer);
         if (sim >= 60) {
-          game.guessedCorrectly[socket.id] = true;
-          const remaining = game.currentDrawTimeLeft || 0;
-          const points = Math.ceil((remaining + 1) / 10);
-          game.players[socket.id].score += points;
-          const correctMsg = `${game.players[socket.id].nickname} guessed correctly and earned ${points} points!`;
-          io.to(lobby).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
-          io.to(lobby).emit('updatePlayers', Object.values(game.players).map(p => ({ nickname: p.nickname, score: p.score })));
+          lobby.guessedCorrectly[socket.id] = true;
+          // Calculate points: next multiple of 10 (higher than remaining time) divided by 10.
+          const points = Math.ceil((lobby.currentDrawTimeLeft + 1) / 10);
+          lobby.players[socket.id].score += points;
+          const nick = lobby.players[socket.id].nickname;
+          const correctMsg = `${nick} guessed correctly and earned ${points} points!`;
+          io.to(socket.lobbyName).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
+          io.to(socket.lobbyName).emit('updatePlayers', Object.values(lobby.players));
+          // Do not broadcast the original guess.
           return;
         }
       }
     }
     // Otherwise, broadcast the chat message.
-    const sender = game.players[socket.id] ? game.players[socket.id].nickname : 'Unknown';
-    const chatData = { nickname: sender, message };
-    game.chatMessages.push(chatData);
-    if (game.chatMessages.length > 15) {
-      game.chatMessages.shift();
+    const nick = socket.nickname || "Unknown";
+    const chatData = { nickname: nick, message };
+    lobby.chatMessages.push(chatData);
+    if (lobby.chatMessages.length > 15) {
+      lobby.chatMessages.shift();
     }
-    io.to(lobby).emit('chatMessage', chatData);
+    io.to(socket.lobbyName).emit('chatMessage', chatData);
   });
   
-  // Broadcast drawing data from the current drawer.
+  // Broadcast drawing data only if from the current drawer.
   socket.on('drawing', (data) => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    if (socket.id === game.currentDrawer) {
-      socket.to(lobby).emit('drawing', data);
+    if (!socket.lobbyName) return;
+    let lobby = getLobby(socket.lobbyName);
+    if (socket.id === lobby.currentDrawer) {
+      socket.broadcast.to(socket.lobbyName).emit('drawing', data);
     }
   });
   
-  // Undo event.
   socket.on('undo', () => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    if (socket.id === game.currentDrawer) {
-      io.to(lobby).emit('undo');
+    if (!socket.lobbyName) return;
+    let lobby = getLobby(socket.lobbyName);
+    if (socket.id === lobby.currentDrawer) {
+      io.to(socket.lobbyName).emit('undo');
     }
   });
   
-  // Clear event: clears the canvas (drawer‐initiated clear does not end the round).
   socket.on('clear', () => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    if (socket.id === game.currentDrawer) {
-      io.to(lobby).emit('clearCanvas');
+    if (!socket.lobbyName) return;
+    let lobby = getLobby(socket.lobbyName);
+    if (socket.id === lobby.currentDrawer) {
+      io.to(socket.lobbyName).emit('clearCanvas');
     }
   });
   
-  // Give up: ends the round.
   socket.on('giveUp', () => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    if (socket.id === game.currentDrawer) {
-      if (game.turnTimer) {
-        clearInterval(game.turnTimer);
-        game.turnTimer = null;
+    if (!socket.lobbyName) return;
+    let lobby = getLobby(socket.lobbyName);
+    if (socket.id === lobby.currentDrawer) {
+      if (lobby.turnTimer) {
+        clearInterval(lobby.turnTimer);
+        lobby.turnTimer = null;
       }
-      io.to(lobby).emit('clearCanvas');
-      endRound(lobby);
+      io.to(socket.lobbyName).emit('clearCanvas');
+      startNextTurn(socket.lobbyName);
     }
   });
   
-  // On disconnect, remove the player from the lobby’s game state.
+  // When the current drawer selects an object from the three options.
+  socket.on('objectChosen', (objectChosen) => {
+    if (!socket.lobbyName) return;
+    let lobby = getLobby(socket.lobbyName);
+    if (socket.id === lobby.currentDrawer && !lobby.currentObject) {
+      if (lobby.turnTimer) {
+        clearInterval(lobby.turnTimer);
+        lobby.turnTimer = null;
+      }
+      lobby.currentObject = objectChosen;
+      lobby.guessedCorrectly = {};
+      lobby.currentDrawTimeLeft = 70;
+      io.to(socket.lobbyName).emit('drawPhaseStarted', { currentDrawer: lobby.currentDrawer, duration: 70 });
+      let timeLeft = 70;
+      lobby.turnTimer = setInterval(() => {
+        timeLeft--;
+        lobby.currentDrawTimeLeft = timeLeft;
+        io.to(socket.lobbyName).emit('drawPhaseCountdown', timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(lobby.turnTimer);
+          lobby.turnTimer = null;
+          io.to(lobby.currentDrawer).emit('drawPhaseTimeout');
+          startNextTurn(socket.lobbyName);
+        }
+      }, 1000);
+    }
+  });
+  
   socket.on('disconnect', () => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    if (game) {
-      delete game.players[socket.id];
-      game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
-      io.to(lobby).emit('updatePlayers', Object.values(game.players).map(p => ({ nickname: p.nickname, score: p.score })));
-      if (socket.id === game.currentDrawer) {
-        startNextTurn(lobby);
+    console.log(`User disconnected: ${socket.id}`);
+    if (socket.lobbyName) {
+      let lobby = getLobby(socket.lobbyName);
+      delete lobby.players[socket.id];
+      lobby.playerOrder = lobby.playerOrder.filter(id => id !== socket.id);
+      io.to(socket.lobbyName).emit('updatePlayers', Object.values(lobby.players));
+      // If the disconnecting player was the current drawer, start next turn.
+      if (socket.id === lobby.currentDrawer) {
+        startNextTurn(socket.lobbyName);
       }
     }
-  });
-  
-  // (Optional) Relay remaining time for draw phase to update game state.
-  socket.on('drawPhaseCountdown', (timeLeft) => {
-    const lobby = socket.lobby;
-    if (!lobby) return;
-    const game = games[lobby];
-    game.currentDrawTimeLeft = timeLeft;
   });
 });
 
