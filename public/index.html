@@ -2,16 +2,14 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Draw Game with Lobbies & Portrait Support</title>
+  <title>Colorful Draw Game</title>
   <style>
     body {
-      margin: 0;
+      margin: 0; 
       padding: 0;
       background: linear-gradient(135deg, #ffe6e6, #e6f7ff);
       font-family: "Comic Sans MS", cursive, sans-serif;
       user-select: none;
-      height: 100vh; /* for reference in media queries */
-      overflow: hidden; /* prevent scrolling if we want a "fullscreen" style */
     }
     #topBar {
       background-color: #ff99cc;
@@ -21,65 +19,16 @@
       color: white;
     }
 
-    /* 
-      We have two steps: 
-       1) Nickname prompt 
-       2) Lobby prompt 
-       3) Game container 
-    */
-    #nicknamePrompt, #lobbyPrompt, #gameContainer {
-      display: none; /* We will show/hide dynamically */
-    }
-
-    /* Common prompt style */
-    .promptContainer {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: calc(100vh - 50px);
-    }
-    .promptContent {
-      background: #ffffffbb;
-      padding: 20px;
-      border-radius: 6px;
-      border: 2px solid #ff99cc;
-      text-align: center;
-    }
-    .promptContent input, .promptContent select {
-      padding: 8px;
-      font-size: 1em;
-      margin: 5px 0;
-    }
-    .promptContent button {
-      background: #ff66cc;
-      border: none;
-      padding: 8px 16px;
-      color: #fff;
-      font-weight: bold;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.2s ease;
-      margin-left: 5px;
-    }
-    .promptContent button:hover {
-      background: #fa49bd;
-    }
-
+    /* Hide game container until user enters nickname */
     #gameContainer {
-      width: 100%;
+      display: none;
       height: calc(100vh - 50px);
-      display: flex; /* The layout will change with media queries */
-      flex-direction: row; /* default: landscape mode style */
     }
-
-    /* 
-      Landscape default:
-        Left: Canvas container (flex:2)
-        Right: Chat & players (width: 300px)
-    */
+    .flexRow {
+      display: flex;
+    }
     #leftPanel, #rightPanel {
       padding: 10px;
-      box-sizing: border-box;
     }
     #leftPanel {
       flex: 2;
@@ -91,6 +40,39 @@
       display: flex;
       flex-direction: column;
       border-left: 2px solid #ff99cc;
+    }
+
+    /* Nickname Prompt */
+    #nicknamePrompt {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: calc(100vh - 50px);
+    }
+    #nicknamePromptContent {
+      background: #ffffffbb;
+      padding: 20px;
+      border-radius: 6px;
+      border: 2px solid #ff99cc;
+      text-align: center;
+    }
+    #nicknamePromptContent input {
+      padding: 8px;
+      font-size: 1em;
+      margin-right: 10px;
+    }
+    #nicknamePromptContent button {
+      background: #ff66cc;
+      border: none;
+      padding: 8px 16px;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #nicknamePromptContent button:hover {
+      background: #fa49bd;
     }
 
     /* Turn Info & Countdown */
@@ -108,7 +90,6 @@
       border-radius: 10px;
       overflow: hidden;
       transition: width 0.3s ease;
-      display: none;
     }
     #countdownFill {
       background: #ff66cc;
@@ -122,33 +103,42 @@
       color: #ff66cc;
       font-size: 1em;
       margin-top: 5px;
-      display: none;
     }
 
     /* Buttons */
     #decisionButtons,
     #drawingTools {
-      display: none;
-      justify-content: center;
+      display: flex;
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
+      justify-content: center;
     }
-    button.toolBtn {
+    #decisionButtons button,
+    #drawingTools button {
       background: #ff66cc;
       border: none;
-      padding: 6px 12px;
+      padding: 8px 16px;
       color: #fff;
       font-weight: bold;
       border-radius: 4px;
       cursor: pointer;
       transition: background 0.2s ease;
     }
-    button.toolBtn:hover {
+    #decisionButtons button:hover,
+    #drawingTools button:hover {
       background: #fa49bd;
     }
 
-    /* Canvas */
+    /* Toolbox select style */
+    select {
+      padding: 5px;
+      border-radius: 4px;
+      border: 2px solid #ccc;
+      font-size: 0.9em;
+      cursor: pointer;
+    }
+
     #canvasContainer {
       flex: 1;
       display: flex;
@@ -159,14 +149,10 @@
       border: 2px dashed #ff66cc;
       background-color: #fff;
       border-radius: 8px;
-      touch-action: none; /* For mobile drawing */
-      width: 100%;
-      height: 100%;
-      max-width: 600px;
-      max-height: 400px;
+      touch-action: none; /* For touch devices */
     }
 
-    /* Chat & players */
+    /* Players List */
     #playersList {
       background: #ffffffbb;
       border: 2px solid #ff99cc;
@@ -189,6 +175,7 @@
       border: 1px solid #333;
     }
 
+    /* Chat */
     #chatBox {
       flex: 1;
       background: #ffffffbb;
@@ -227,104 +214,40 @@
     #chatInputSection button:hover {
       background: #fa49bd;
     }
-
-    /*
-      MEDIA QUERY for PORTRAIT:
-      If the device is in portrait orientation OR narrower displays,
-      we transform the layout:
-        - The top 60% is the canvas
-        - The bottom 40% is a 2-column layout: left=chat (70%), right=players (30%)
-    */
-    @media screen and (max-aspect-ratio: 3/4) {
-      /* This says if width/height < 3/4 => likely portrait */
-      #gameContainer {
-        flex-direction: column; /* stack vertically */
-      }
-
-      /* The top part (canvas) is 60% height */
-      #canvasContainer {
-        flex: 0 0 60%; /* fix canvas container to 60% of the parent's height */
-      }
-
-      /* The bottom part is 40% height, split horizontally 70/30. 
-         We'll wrap chat & players in a container so we can do 2 columns. 
-      */
-      #bottomContainer {
-        flex: 1;
-        display: flex;
-        flex-direction: row;
-        width: 100%;
-      }
-      #chatSection {
-        flex: 0 0 70%;
-        display: flex;
-        flex-direction: column;
-        padding: 10px;
-        box-sizing: border-box;
-      }
-      #playersSection {
-        flex: 0 0 30%;
-        display: flex;
-        flex-direction: column;
-        border-left: 2px solid #ff99cc;
-        padding: 10px;
-        box-sizing: border-box;
-      }
-      /* We'll hide #rightPanel in portrait and use #bottomContainer instead. */
-      #rightPanel {
-        display: none !important;
-      }
-    }
   </style>
 </head>
 <body>
-  <div id="topBar">Draw Game with Lobbies & Portrait Support</div>
+  <div id="topBar">Draw Game: Colorful Edition</div>
 
   <!-- Nickname Prompt -->
-  <div id="nicknamePrompt" class="promptContainer">
-    <div class="promptContent">
-      <h2>Step 1: Enter Nickname</h2>
-      <input id="nicknameInput" placeholder="Your nickname..." />
-      <button id="joinBtn">Next</button>
-    </div>
-  </div>
-
-  <!-- Lobby Prompt (choose a lobby + passcode) -->
-  <div id="lobbyPrompt" class="promptContainer">
-    <div class="promptContent">
-      <h2>Step 2: Choose Lobby</h2>
-      <select id="lobbySelect">
-        <!-- We'll populate this from client.js or you can hardcode. -->
-      </select>
-      <br/>
-      <input id="lobbyPasscode" placeholder="Enter passcode..." />
-      <br/>
-      <button id="lobbyJoinBtn">Join Lobby</button>
-      <p id="lobbyError" style="color:red;"></p>
+  <div id="nicknamePrompt">
+    <div id="nicknamePromptContent">
+      <h2>Welcome! Please enter your nickname:</h2>
+      <input id="nicknameInput" placeholder="Enter your nickname" />
+      <button id="joinBtn">Join</button>
     </div>
   </div>
 
   <!-- Main Game Container -->
-  <div id="gameContainer">
-    <!-- Left Panel for landscape -->
+  <div id="gameContainer" class="flexRow">
     <div id="leftPanel">
       <div id="turnInfo">Waiting for players...</div>
 
-      <!-- Countdown bar + number -->
-      <div id="countdownBar">
+      <!-- Countdown -->
+      <div id="countdownBar" style="display:none;">
         <div id="countdownFill"></div>
       </div>
-      <div id="countdownNumber">0</div>
+      <div id="countdownNumber" style="display:none;">0</div>
 
       <!-- Decision Buttons -->
-      <div id="decisionButtons">
-        <button class="toolBtn" id="drawBtn">Draw</button>
-        <button class="toolBtn" id="skipBtn">Skip</button>
+      <div id="decisionButtons" style="display:none;">
+        <button id="drawBtn">Draw</button>
+        <button id="skipBtn">Skip</button>
       </div>
 
       <!-- Drawing Tools -->
-      <div id="drawingTools">
-        <!-- color/thickness dropdowns from previous code -->
+      <div id="drawingTools" style="display:none;">
+        <!-- Color/Thickness Toolbox -->
         <select id="colorSelect">
           <option value="#000000">Black</option>
           <option value="#ffffff">White</option>
@@ -355,18 +278,16 @@
           <option value="10">10px</option>
         </select>
 
-        <button class="toolBtn" id="undoBtn">Undo</button>
-        <button class="toolBtn" id="clearBtn">Clear</button>
-        <button class="toolBtn" id="giveUpBtn">Give Up</button>
+        <button id="undoBtn">Undo</button>
+        <button id="clearBtn">Clear</button>
+        <button id="giveUpBtn">Give Up</button>
       </div>
 
-      <!-- Canvas Container -->
       <div id="canvasContainer">
         <canvas id="myCanvas" width="600" height="400"></canvas>
       </div>
     </div>
 
-    <!-- Right Panel for landscape -->
     <div id="rightPanel">
       <div id="playersList"></div>
       <div id="chatBox"></div>
@@ -375,25 +296,11 @@
         <button id="chatSendBtn">Send</button>
       </div>
     </div>
-
-    <!-- Bottom Container for portrait (hidden in landscape, shown in portrait) -->
-    <div id="bottomContainer" style="display:none;">
-      <div id="chatSection">
-        <div id="chatBoxPortrait" style="flex:1; border:2px solid #ff99cc; background:#ffffffbb; border-radius:6px; padding:10px; overflow-y:auto; margin-bottom:5px;"></div>
-        <div style="display:flex; gap:5px;">
-          <input id="chatInputPortrait" placeholder="Say something nice..." style="flex:1; padding:6px; border:2px solid #ccc; border-radius:4px;" />
-          <button id="chatSendPortrait" style="background:#ff66cc; border:none; padding:8px 12px; color:#fff; font-weight:bold; border-radius:4px; cursor:pointer;">Send</button>
-        </div>
-      </div>
-      <div id="playersSection">
-        <div id="playersListPortrait" style="background:#ffffffbb; border:2px solid #ff99cc; border-radius:6px; padding:10px; overflow-y:auto; height:100%;"></div>
-      </div>
-    </div>
   </div>
 
   <!-- Socket.IO -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Client code -->
+  <!-- Client Script -->
   <script src="client.js"></script>
 </body>
 </html>

@@ -3,92 +3,66 @@ const express = require('express');
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
-const lobbyData = require('./lobbies');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Serve static files from "public"
 app.use(express.static(path.join(__dirname, 'public')));
 
-/*
-  We'll store a `rooms` object keyed by the lobby name.
-  Each room has:
-    - passcode (from lobbies.js)
-    - players: []  (each: { socketId, username })
-    - strokes: []
-    - chatMessages: []
-    - currentTurnIndex: 0
-    - isDrawingPhase: bool
-    - decisionTimer, drawingTimer
-*/
-const rooms = {};
+// Data
+let players = [];             // { socketId, username, color }
+let currentTurnIndex = 0;
+let isDrawingPhase = false;
+let decisionTimer = null;
+let drawingTimer = null;
 
-// Initialize each lobby from lobbies.js
-lobbyData.forEach((l) => {
-  rooms[l.name] = {
-    passcode: l.passcode,
-    players: [],
-    strokes: [],
-    chatMessages: [],
-    currentTurnIndex: 0,
-    isDrawingPhase: false,
-    decisionTimer: null,
-    drawingTimer: null
-  };
-});
+let strokes = []; // { strokeId, path, color, thickness, drawerId }
+let nextStrokeId = 1;
 
-/** Helper Functions **/
-function clearTimers(roomObj) {
-  if (roomObj.decisionTimer) clearTimeout(roomObj.decisionTimer);
-  if (roomObj.drawingTimer) clearTimeout(roomObj.drawingTimer);
-  roomObj.decisionTimer = null;
-  roomObj.drawingTimer = null;
+// Chat
+let chatMessages = []; // store last 15 messages
+
+// === Utility ===
+function generateRandomColor() {
+  const hue = Math.floor(Math.random() * 360);
+  return `hsl(${hue}, 90%, 80%)`;
 }
-
-function nextTurn(lobbyName) {
-  const room = rooms[lobbyName];
-  if (!room) return;
-  clearTimers(room);
-
-  if (room.players.length === 0) return;
-
-  room.currentTurnIndex = (room.currentTurnIndex + 1) % room.players.length;
-  room.isDrawingPhase = false;
-  startDecisionPhase(lobbyName);
+function clearTimers() {
+  if (decisionTimer) clearTimeout(decisionTimer);
+  if (drawingTimer) clearTimeout(drawingTimer);
+  decisionTimer = null;
+  drawingTimer = null;
 }
+function nextTurn() {
+  clearTimers();
+  if (players.length === 0) return;
 
-function startDecisionPhase(lobbyName) {
-  const room = rooms[lobbyName];
-  if (!room) return;
-
-  const currentPlayer = room.players[room.currentTurnIndex];
+  currentTurnIndex = (currentTurnIndex + 1) % players.length;
+  isDrawingPhase = false;
+  startDecisionPhase();
+}
+function startDecisionPhase() {
+  const currentPlayer = players[currentTurnIndex];
   if (!currentPlayer) return;
 
-  io.to(lobbyName).emit('turnInfo', {
+  io.emit('turnInfo', {
     currentPlayerId: currentPlayer.socketId,
     currentPlayerName: currentPlayer.username,
     isDrawingPhase: false,
     timeLeft: 10
   });
 
-  // 10s to choose
-  room.decisionTimer = setTimeout(() => {
-    nextTurn(lobbyName);
+  decisionTimer = setTimeout(() => {
+    nextTurn();
   }, 10000);
 }
-
-function startDrawingPhase(lobbyName) {
-  const room = rooms[lobbyName];
-  if (!room) return;
-
-  const currentPlayer = room.players[room.currentTurnIndex];
+function startDrawingPhase() {
+  const currentPlayer = players[currentTurnIndex];
   if (!currentPlayer) return;
 
-  room.isDrawingPhase = true;
-
-  io.to(lobbyName).emit('turnInfo', {
+  isDrawingPhase = true;
+  io.emit('turnInfo', {
     currentPlayerId: currentPlayer.socketId,
     currentPlayerName: currentPlayer.username,
     isDrawingPhase: true,
@@ -96,148 +70,93 @@ function startDrawingPhase(lobbyName) {
   });
 
   // 70s timer
-  room.drawingTimer = setTimeout(() => {
-    // time up -> clear canvas
-    room.strokes = [];
-    io.to(lobbyName).emit('clearCanvas');
-    nextTurn(lobbyName);
+  drawingTimer = setTimeout(() => {
+    strokes = [];
+    io.emit('clearCanvas');
+    nextTurn();
   }, 70000);
 }
-
-function broadcastPlayersList(lobbyName) {
-  const room = rooms[lobbyName];
-  if (!room) return;
-
-  // We could also store a color if we want, but for now just username
-  io.to(lobbyName).emit('playersList', room.players.map(p => ({
+function broadcastPlayersList() {
+  io.emit('playersList', players.map(p => ({
     username: p.username,
-    // color: p.color => optional if you want each user color
+    color: p.color,
     socketId: p.socketId
   })));
 }
 
-/** Socket.IO **/
+// === Socket.IO ===
 io.on('connection', (socket) => {
   console.log('[IO] Connected:', socket.id);
 
-  /*
-    1) After user enters nickname, they request "joinLobby" with:
-       { lobbyName, passcode, username }
-  */
-  socket.on('joinLobby', ({ lobbyName, passcode, username }) => {
-    const room = rooms[lobbyName];
-    if (!room) {
-      socket.emit('lobbyError', 'Lobby not found.');
-      return;
-    }
-    if (passcode !== room.passcode) {
-      socket.emit('lobbyError', 'Incorrect passcode.');
-      return;
-    }
+  socket.on('joinGame', (username) => {
+    if (!username || !username.trim()) return;
+    const color = generateRandomColor();
+    players.push({ socketId: socket.id, username, color });
 
-    // If passcode is correct, join socket.io "room" for that lobby
-    socket.join(lobbyName);
+    broadcastPlayersList();
+    socket.emit('initCanvas', strokes);
+    socket.emit('initChat', chatMessages);
 
-    // Add player data to that room
-    room.players.push({
-      socketId: socket.id,
-      username
-    });
-
-    // Send them the current strokes & chat
-    socket.emit('initCanvas', room.strokes);
-    socket.emit('initChat', room.chatMessages);
-
-    // Broadcast updated players list
-    broadcastPlayersList(lobbyName);
-
-    // If this is the only player, start the decision phase
-    if (room.players.length === 1) {
-      room.currentTurnIndex = 0;
-      startDecisionPhase(lobbyName);
+    if (players.length === 1) {
+      currentTurnIndex = 0;
+      startDecisionPhase();
     }
 
-    // Store the chosen lobby name on the socket so we know where they belong
-    socket.data.lobbyName = lobbyName;
-
-    console.log(`[JOIN] user=${username} joined lobby=${lobbyName}`);
+    console.log(`[JOIN] ${username} (${socket.id}) color=${color}`);
   });
 
-  // Decision: draw or skip
+  // 10s decision
   socket.on('drawChoice', (choice) => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
+    const currentPlayer = players[currentTurnIndex];
+    if (!currentPlayer || socket.id !== currentPlayer.socketId) return;
 
-    const room = rooms[lobbyName];
-    if (!room) return;
-
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (!currentPlayer || currentPlayer.socketId !== socket.id) return;
-
-    if (room.decisionTimer) clearTimeout(room.decisionTimer);
+    if (decisionTimer) clearTimeout(decisionTimer);
 
     if (choice === 'draw') {
-      startDrawingPhase(lobbyName);
+      startDrawingPhase();
     } else {
-      nextTurn(lobbyName);
+      nextTurn();
     }
   });
 
-  // Real-time partial drawing
+  // Real-time partial strokes
   socket.on('partialDrawing', ({ fromX, fromY, toX, toY, color, thickness }) => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
+    const currentPlayer = players[currentTurnIndex];
+    if (!currentPlayer || !isDrawingPhase) return;
+    if (socket.id !== currentPlayer.socketId) return;
 
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (!currentPlayer || currentPlayer.socketId !== socket.id) return;
-    if (!room.isDrawingPhase) return;
-
-    // Broadcast to others in the same lobby
-    socket.to(lobbyName).emit('partialDrawing', {
-      fromX, fromY, toX, toY, color, thickness
-    });
+    // Broadcast to others
+    socket.broadcast.emit('partialDrawing', { fromX, fromY, toX, toY, color, thickness });
   });
 
   // Final stroke
   socket.on('strokeComplete', ({ path, color, thickness }) => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
-
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (!currentPlayer || currentPlayer.socketId !== socket.id) return;
-    if (!room.isDrawingPhase) return;
+    const currentPlayer = players[currentTurnIndex];
+    if (!currentPlayer || !isDrawingPhase) return;
+    if (socket.id !== currentPlayer.socketId) return;
 
     const stroke = {
-      strokeId: Date.now() + Math.random(), // or a global ID
+      strokeId: nextStrokeId++,
       path,
       color,
       thickness,
-      drawerId: socket.id
+      drawerId: currentPlayer.socketId
     };
-    room.strokes.push(stroke);
+    strokes.push(stroke);
 
-    io.to(lobbyName).emit('strokeComplete', stroke);
+    io.emit('strokeComplete', stroke);
   });
 
   // Undo last stroke
   socket.on('undoStroke', () => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
+    const currentPlayer = players[currentTurnIndex];
+    if (!currentPlayer || !isDrawingPhase) return;
+    if (socket.id !== currentPlayer.socketId) return;
 
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (!currentPlayer || currentPlayer.socketId !== socket.id) return;
-    if (!room.isDrawingPhase) return;
-
-    for (let i = room.strokes.length - 1; i >= 0; i--) {
-      if (room.strokes[i].drawerId === socket.id) {
-        const removed = room.strokes.splice(i, 1)[0];
-        io.to(lobbyName).emit('removeStroke', removed.strokeId);
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      if (strokes[i].drawerId === currentPlayer.socketId) {
+        const removed = strokes.splice(i, 1)[0];
+        io.emit('removeStroke', removed.strokeId);
         break;
       }
     }
@@ -245,87 +164,62 @@ io.on('connection', (socket) => {
 
   // Clear
   socket.on('clearCanvas', () => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
+    const currentPlayer = players[currentTurnIndex];
+    if (!currentPlayer || !isDrawingPhase) return;
+    if (socket.id !== currentPlayer.socketId) return;
 
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (!currentPlayer || currentPlayer.socketId !== socket.id) return;
-    if (!room.isDrawingPhase) return;
-
-    room.strokes = [];
-    io.to(lobbyName).emit('clearCanvas');
+    strokes = [];
+    io.emit('clearCanvas');
   });
 
   // Give Up
   socket.on('giveUp', () => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
+    const currentPlayer = players[currentTurnIndex];
+    if (!currentPlayer || !isDrawingPhase) return;
+    if (socket.id !== currentPlayer.socketId) return;
 
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (!currentPlayer || currentPlayer.socketId !== socket.id) return;
-    if (!room.isDrawingPhase) return;
-
-    room.strokes = [];
-    io.to(lobbyName).emit('clearCanvas');
-    nextTurn(lobbyName);
+    strokes = [];
+    io.emit('clearCanvas');
+    nextTurn();
   });
 
   // Chat
   socket.on('chatMessage', (text) => {
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
-
-    const player = room.players.find(p => p.socketId === socket.id);
+    const player = players.find(p => p.socketId === socket.id);
     if (!player) return;
 
     const msg = { username: player.username, text };
-    room.chatMessages.push(msg);
-    if (room.chatMessages.length > 15) {
-      room.chatMessages.shift();
-    }
-    io.to(lobbyName).emit('chatMessage', msg);
+    chatMessages.push(msg);
+    if (chatMessages.length > 15) chatMessages.shift();
+    io.emit('chatMessage', msg);
   });
 
   // Disconnect
   socket.on('disconnect', () => {
     console.log('[IO] Disconnected:', socket.id);
-    const lobbyName = socket.data.lobbyName;
-    if (!lobbyName) return;
-    const room = rooms[lobbyName];
-    if (!room) return;
-
-    const idx = room.players.findIndex(p => p.socketId === socket.id);
+    const idx = players.findIndex(p => p.socketId === socket.id);
     if (idx !== -1) {
-      const wasCurrent = (idx === room.currentTurnIndex);
-      room.players.splice(idx, 1);
+      const wasCurrent = (idx === currentTurnIndex);
+      players.splice(idx, 1);
 
       if (wasCurrent) {
-        nextTurn(lobbyName);
-      } else if (idx < room.currentTurnIndex) {
-        room.currentTurnIndex--;
+        nextTurn();
+      } else if (idx < currentTurnIndex) {
+        currentTurnIndex--;
       }
     }
 
-    if (room.players.length === 0) {
-      // reset room
-      clearTimers(room);
-      room.strokes = [];
-      room.chatMessages = [];
-      room.currentTurnIndex = 0;
-      room.isDrawingPhase = false;
+    if (players.length === 0) {
+      clearTimers();
+      strokes = [];
+      chatMessages = [];
+      currentTurnIndex = 0;
     }
 
-    broadcastPlayersList(lobbyName);
+    broadcastPlayersList();
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`[SERVER] Listening on http://localhost:${PORT}`);
