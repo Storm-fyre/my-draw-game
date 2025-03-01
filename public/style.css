@@ -1,0 +1,136 @@
+/* Reset defaults */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+/* Nickname modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 5px;
+  text-align: center;
+}
+
+/* Game container */
+#gameContainer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top container for canvas */
+#topContainer {
+  position: relative;
+  width: 100%;
+  /* Height will be set dynamically to ensure the canvas is square */
+}
+
+/* Canvas styling */
+#drawingCanvas {
+  display: block;
+  background: #fff;
+  border: 1px solid #ccc;
+  margin: auto;
+}
+
+/* Tools area at the bottom of the canvas */
+#tools {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 0;
+}
+
+#thicknessOptions, #colorOptions {
+  margin: 5px 0;
+}
+
+.thickness, .color {
+  margin: 0 3px;
+  padding: 5px;
+  border: none;
+  cursor: pointer;
+}
+
+.color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+/* Bottom container for message and player boxes */
+#bottomContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #ccc;
+}
+
+/* Toggle button container */
+#toggleContainer {
+  text-align: right;
+  padding: 5px;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Message and player box styles */
+#messageBox, #playerBox {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: none;
+}
+
+#messageBox.active, #playerBox.active {
+  display: block;
+}
+
+/* Chat form styling */
+#chatForm {
+  display: flex;
+  margin-top: 10px;
+}
+
+#chatInput {
+  flex: 1;
+  padding: 5px;
+  font-size: 16px;
+}
+
+#chatForm button {
+  padding: 5px 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Messages container */
+#messages {
+  max-height: 100%;
+  overflow-y: auto;
+}

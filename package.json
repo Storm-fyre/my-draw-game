@@ -1,17 +1,13 @@
 {
   "name": "my-draw-game",
   "version": "1.0.0",
-  "main": "server.js",
+  "description": "A drawasaurus-like game for mobile phones",
+  "main": "server/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server/index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "express": "^4.21.2",
-    "socket.io": "^4.8.1"
-  },
-  "description": ""
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
 }
