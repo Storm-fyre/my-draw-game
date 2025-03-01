@@ -88,28 +88,38 @@ function startNextTurn(lobbyName) {
   const state = activeLobbies[lobbyName];
   if (!state) return;
   
+  // Clear any existing turn timer
   if (state.turnTimer) {
     clearInterval(state.turnTimer);
     state.turnTimer = null;
   }
-  // Clear canvas state for the lobby
+  // Clear the canvas state for the lobby
   io.to(lobbyName).emit('clearCanvas');
   state.canvasStrokes = [];
   state.currentObject = null;
   state.guessedCorrectly = {};
   
+  // Determine the next drawer.
+  // If there is only one player, the same player continues.
   if (state.playerOrder.length === 0) {
     state.currentDrawer = null;
     return;
   }
-  let currentIndex = state.playerOrder.indexOf(state.currentDrawer);
-  if (currentIndex === -1 || currentIndex === state.playerOrder.length - 1) {
+  if (state.playerOrder.length === 1) {
     state.currentDrawer = state.playerOrder[0];
   } else {
-    state.currentDrawer = state.playerOrder[currentIndex + 1];
+    let currentIndex = state.playerOrder.indexOf(state.currentDrawer);
+    if (currentIndex === -1 || currentIndex === state.playerOrder.length - 1) {
+      state.currentDrawer = state.playerOrder[0];
+    } else {
+      state.currentDrawer = state.playerOrder[currentIndex + 1];
+    }
   }
   
+  // Broadcast turn start event to lobby
   io.to(lobbyName).emit('turnStarted', { currentDrawer: state.currentDrawer, duration: DECISION_DURATION });
+  
+  // Send object selection options only to the new drawing player
   const options = getRandomObjects(3);
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
@@ -152,7 +162,7 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // NEW JOINER: send fresh (empty) chat and current canvas strokes
+    // For a new joiner, send an empty chat and the current canvas strokes so they see the in-progress drawing.
     socket.emit('init', {
       players: Object.values(state.players),
       chatMessages: [],
@@ -227,7 +237,7 @@ io.on('connection', (socket) => {
           const correctMsg = `${nickname} guessed correctly and earned ${points} points!`;
           io.to(lobbyName).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
           io.to(lobbyName).emit('updatePlayers', Object.values(state.players));
-          // Check if all non-drawing players have guessed
+          // If all non-drawing players have guessed, end the turn immediately.
           if (Object.keys(state.guessedCorrectly).length >= (Object.keys(state.players).length - 1)) {
             if (state.turnTimer) {
               clearInterval(state.turnTimer);

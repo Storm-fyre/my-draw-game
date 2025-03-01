@@ -270,15 +270,15 @@ function updateDashHint() {
     hintWords.push(disp2.trim());
     hintWords.push(disp3.trim());
   }
-  // Join words with 3-space gap between sets.
+  // Join words with a 3-space gap.
   dashHintDiv.textContent = hintWords.join("   ");
 }
 
 // --- Socket events ---
 socket.on('init', (data) => {
-  // For new joiners, use the fresh (empty) chat history.
+  // For new joiners, use an empty chat history.
   updatePlayerList(data.players);
-  // If canvas strokes exist, load them so the new player sees the current drawing.
+  // Load current canvas strokes so the new joiner sees the in-progress drawing.
   if(data.canvasStrokes) {
     paths = data.canvasStrokes;
     redrawStrokes();
@@ -311,7 +311,6 @@ socket.on('strokeComplete', (data) => {
 });
 
 socket.on('clearCanvas', () => {
-  // When clearCanvas is received, clear the canvas and stored strokes.
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   paths = [];
   currentRemoteStroke = null;
@@ -336,7 +335,7 @@ socket.on('turnStarted', (data) => {
     isMyTurn = false;
   }
   turnPrompt.style.display = (data.currentDrawer === socket.id) ? 'flex' : 'none';
-  // Show draw controls only for drawing player.
+  // Show draw controls only for the drawing player.
   drawControlsDiv.style.display = (data.currentDrawer === socket.id) ? 'block' : 'none';
 });
 
@@ -373,7 +372,6 @@ socket.on('objectSelection', (data) => {
 // When the drawing player chooses an object, broadcast it so non-drawing players can show the dash hint.
 socket.on('objectChosenBroadcast', (data) => {
   currentObjectStr = data.object;
-  // Set initial draw phase time for hint purposes
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
 });
@@ -391,7 +389,6 @@ socket.on('drawPhaseStarted', (data) => {
     isMyTurn = false;
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
-    // Hide drawing controls for non-drawing players.
     drawControlsDiv.style.display = 'none';
   }
 });
