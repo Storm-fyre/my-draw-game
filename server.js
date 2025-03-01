@@ -17,9 +17,10 @@ const MAX_CHAT_MESSAGES = 15;
 
 let currentDrawer = null;
 let turnTimer = null;
-const TURN_DURATION = 10; // seconds
+const DECISION_DURATION = 10; // seconds for decision phase
+const DRAW_DURATION = 70; // seconds for drawing phase
 
-// Helper: start the next player's turn
+// Helper: start the next player's turn (decision phase)
 function startNextTurn() {
   if(turnTimer) {
     clearInterval(turnTimer);
@@ -38,9 +39,9 @@ function startNextTurn() {
   } else {
     currentDrawer = playerOrder[currentIndex + 1];
   }
-  // Inform everyone about the new turn
-  io.emit('turnStarted', { currentDrawer, duration: TURN_DURATION });
-  let timeLeft = TURN_DURATION;
+  // Inform everyone about the new turn decision phase
+  io.emit('turnStarted', { currentDrawer, duration: DECISION_DURATION });
+  let timeLeft = DECISION_DURATION;
   turnTimer = setInterval(() => {
     timeLeft--;
     io.emit('turnCountdown', timeLeft);
@@ -70,8 +71,8 @@ io.on('connection', (socket) => {
     // If no current drawer, start with this player
     if (!currentDrawer) {
       currentDrawer = socket.id;
-      io.emit('turnStarted', { currentDrawer, duration: TURN_DURATION });
-      let timeLeft = TURN_DURATION;
+      io.emit('turnStarted', { currentDrawer, duration: DECISION_DURATION });
+      let timeLeft = DECISION_DURATION;
       turnTimer = setInterval(() => {
         timeLeft--;
         io.emit('turnCountdown', timeLeft);
@@ -117,9 +118,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Give up turn
+  // Give up turn (applies to drawing phase as well)
   socket.on('giveUp', () => {
     if (socket.id === currentDrawer) {
+      if(turnTimer) {
+        clearInterval(turnTimer);
+        turnTimer = null;
+      }
       io.emit('clearCanvas');
       startNextTurn();
     }
@@ -131,8 +136,26 @@ io.on('connection', (socket) => {
       if (decision === 'skip') {
         io.emit('clearCanvas');
         startNextTurn();
+      } else if (decision === 'draw') {
+        // Player chooses to draw: cancel decision countdown and start drawing phase
+        if (turnTimer) {
+          clearInterval(turnTimer);
+          turnTimer = null;
+        }
+        // Notify all clients that drawing phase has started with 70 seconds
+        io.emit('drawPhaseStarted', { currentDrawer, duration: DRAW_DURATION });
+        let timeLeft = DRAW_DURATION;
+        turnTimer = setInterval(() => {
+          timeLeft--;
+          io.emit('drawPhaseCountdown', timeLeft);
+          if(timeLeft <= 0) {
+            clearInterval(turnTimer);
+            turnTimer = null;
+            io.to(currentDrawer).emit('drawPhaseTimeout');
+            startNextTurn();
+          }
+        }, 1000);
       }
-      // If "draw", the player continues – no additional action here.
     }
   });
 

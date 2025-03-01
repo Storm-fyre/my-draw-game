@@ -104,6 +104,19 @@ body, html {
   text-align: center;
 }
 
+/* Draw phase countdown display */
+#drawCountdown {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(0,128,0,0.8);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 16px;
+  display: none;
+}
+
 /* Box container for chat/player list */
 #boxContainer {
   flex: 1;

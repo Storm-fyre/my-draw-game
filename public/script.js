@@ -41,6 +41,9 @@ function resizeLayout() {
   const totalHeight = gameContainer.clientHeight;
   const boxHeight = totalHeight - width;
   boxContainer.style.height = boxHeight + "px";
+
+  // Redraw canvas content on resize to adjust scaling
+  redrawAll();
 }
 
 window.addEventListener('resize', resizeLayout);
@@ -121,18 +124,21 @@ socket.on('undo', () => {
   undoLastStroke();
 });
 
-// Turn events: show prompt if it’s your turn
+// Turn events: show prompt if it’s your turn (decision phase)
 const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const countdownDisplay = document.getElementById('countdownDisplay');
 const drawBtn = document.getElementById('drawBtn');
 const skipBtn = document.getElementById('skipBtn');
+const drawCountdown = document.getElementById('drawCountdown');
 
 socket.on('turnStarted', (data) => {
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'flex';
+    drawCountdown.style.display = 'none';
     promptText.textContent = "Your turn! Choose:";
+    countdownDisplay.textContent = data.duration;
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'none';
@@ -140,7 +146,9 @@ socket.on('turnStarted', (data) => {
 });
 
 socket.on('turnCountdown', (timeLeft) => {
-  countdownDisplay.textContent = timeLeft;
+  if(turnPrompt.style.display !== 'none') {
+    countdownDisplay.textContent = timeLeft;
+  }
 });
 
 socket.on('turnTimeout', () => {
@@ -148,11 +156,35 @@ socket.on('turnTimeout', () => {
   isMyTurn = false;
 });
 
+// Draw phase events
+socket.on('drawPhaseStarted', (data) => {
+  if(data.currentDrawer === socket.id) {
+    isMyTurn = true;
+    turnPrompt.style.display = 'none';
+    drawCountdown.style.display = 'block';
+    drawCountdown.textContent = data.duration;
+  } else {
+    isMyTurn = false;
+    drawCountdown.style.display = 'none';
+  }
+});
+
+socket.on('drawPhaseCountdown', (timeLeft) => {
+  if(drawCountdown.style.display !== 'none') {
+    drawCountdown.textContent = timeLeft;
+  }
+});
+
+socket.on('drawPhaseTimeout', () => {
+  drawCountdown.style.display = 'none';
+  isMyTurn = false;
+});
+
 // Turn decision buttons
 drawBtn.addEventListener('click', () => {
   if(isMyTurn) {
     socket.emit('turnDecision', 'draw');
-    turnPrompt.style.display = 'none';
+    // The decision phase UI will be replaced by draw phase UI upon receiving drawPhaseStarted event
   }
 });
 skipBtn.addEventListener('click', () => {
@@ -163,8 +195,8 @@ skipBtn.addEventListener('click', () => {
   }
 });
 
-// Drawing on the canvas
-function getPointerPos(e) {
+// Normalize pointer position to relative coordinates (0 to 1)
+function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
   if(e.touches && e.touches.length > 0) {
@@ -174,20 +206,20 @@ function getPointerPos(e) {
     x = e.clientX - rect.left;
     y = e.clientY - rect.top;
   }
-  return { x, y };
+  return { x: x / canvas.width, y: y / canvas.height };
 }
 
 function startDrawing(e) {
   if (!isMyTurn) return;
   isDrawing = true;
   currentPath = [];
-  const pos = getPointerPos(e);
+  const pos = getNormalizedPos(e);
   currentPath.push(pos);
 }
 
 function drawingMove(e) {
   if (!isMyTurn || !isDrawing) return;
-  const pos = getPointerPos(e);
+  const pos = getNormalizedPos(e);
   currentPath.push(pos);
   drawStroke({ path: currentPath, color: currentColor, thickness: currentThickness }, true);
   socket.emit('drawing', { path: currentPath, color: currentColor, thickness: currentThickness });
@@ -210,7 +242,7 @@ canvas.addEventListener('touchstart', (e) => { startDrawing(e); });
 canvas.addEventListener('touchmove', (e) => { drawingMove(e); e.preventDefault(); });
 canvas.addEventListener('touchend', (e) => { stopDrawing(e); });
 
-// Draw stroke with smooth quadratic curves
+// Draw stroke with smooth quadratic curves using normalized coordinates
 function drawStroke(data, emitLocal) {
   if(!data.path || data.path.length < 2) return;
   ctx.strokeStyle = data.color;
@@ -219,13 +251,19 @@ function drawStroke(data, emitLocal) {
   ctx.lineJoin = 'round';
 
   ctx.beginPath();
-  ctx.moveTo(data.path[0].x, data.path[0].y);
+  // Convert normalized coordinate to actual pixel position
+  ctx.moveTo(data.path[0].x * canvas.width, data.path[0].y * canvas.height);
   for(let i = 1; i < data.path.length - 1; i++) {
-    const midX = (data.path[i].x + data.path[i+1].x) / 2;
-    const midY = (data.path[i].y + data.path[i+1].y) / 2;
-    ctx.quadraticCurveTo(data.path[i].x, data.path[i].y, midX, midY);
+    const x_i = data.path[i].x * canvas.width;
+    const y_i = data.path[i].y * canvas.height;
+    const x_next = data.path[i+1].x * canvas.width;
+    const y_next = data.path[i+1].y * canvas.height;
+    const midX = (x_i + x_next) / 2;
+    const midY = (y_i + y_next) / 2;
+    ctx.quadraticCurveTo(x_i, y_i, midX, midY);
   }
-  ctx.lineTo(data.path[data.path.length - 1].x, data.path[data.path.length - 1].y);
+  let lastPoint = data.path[data.path.length - 1];
+  ctx.lineTo(lastPoint.x * canvas.width, lastPoint.y * canvas.height);
   ctx.stroke();
 }
 
@@ -280,12 +318,12 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
     socket.emit('giveUp');
     clearCanvas();
     isMyTurn = false;
+    drawCountdown.style.display = 'none';
   }
 });
 
 // Handle on-screen keyboard adjustments (simplistic approach)
 chatInput.addEventListener('focus', () => {
-  // When keyboard appears, recalc layout (advanced handling may be needed)
   resizeLayout();
 });
 chatInput.addEventListener('blur', () => {

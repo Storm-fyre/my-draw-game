@@ -60,7 +60,7 @@
         <button id="clearBtn">Clear</button>
         <button id="giveUpBtn">Give Up</button>
       </div>
-      <!-- Turn prompt overlay (visible only when it’s your turn) -->
+      <!-- Turn prompt overlay (visible only during the decision phase) -->
       <div id="turnPrompt">
         <div id="turnMessage">
           <p id="promptText">Your turn!</p>
@@ -71,6 +71,8 @@
           <div id="countdownDisplay">10</div>
         </div>
       </div>
+      <!-- Draw phase countdown display at top right of canvas -->
+      <div id="drawCountdown" class="drawCountdown" style="display: none;"></div>
     </div>
 
     <!-- Bottom box container (chat and players list) -->
