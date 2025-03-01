@@ -115,6 +115,7 @@ function startNextTurn(lobbyName) {
   
   let currentDrawerRank = state.playerOrder.indexOf(state.currentDrawer) + 1;
   let currentDrawerName = state.players[state.currentDrawer].nickname;
+  // Broadcast turn-start along with the drawer's rank and name
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
     duration: DECISION_DURATION,
@@ -123,6 +124,7 @@ function startNextTurn(lobbyName) {
   });
   
   const options = getRandomObjects(3);
+  // Send object selection options privately to the drawer
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
   let timeLeft = DECISION_DURATION;
@@ -144,6 +146,7 @@ io.on('connection', (socket) => {
   // --- Lobby joining ---
   socket.on('joinLobby', (data) => {
     const lobbyEntry = lobbyInfo.find(l => l.name === data.lobbyName);
+    // If passcode exists and does not match, reject; if passcode is blank, allow directly.
     if (!lobbyEntry || (lobbyEntry.passcode && lobbyEntry.passcode !== data.passcode)) {
       socket.emit('lobbyError', { message: 'Invalid lobby or passcode.' });
       return;
@@ -163,7 +166,7 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // For a new joiner, send an empty chat history and current canvas strokes.
+    // For new joiners, send empty chat history and current canvas strokes so they see in-progress drawing.
     socket.emit('init', {
       players: state.playerOrder.map(id => {
         let player = state.players[id];
@@ -215,7 +218,7 @@ io.on('connection', (socket) => {
       state.currentObject = objectChosen;
       state.guessedCorrectly = {};
       state.currentDrawTimeLeft = DRAW_DURATION;
-      // Broadcast the chosen object for dash hint display to non-drawing clients.
+      // Broadcast the chosen object for dash hint display (words not visible to the drawer)
       io.to(lobbyName).emit('objectChosenBroadcast', { object: state.currentObject });
       io.to(lobbyName).emit('drawPhaseStarted', { currentDrawer: state.currentDrawer, duration: DRAW_DURATION });
       let timeLeft = DRAW_DURATION;

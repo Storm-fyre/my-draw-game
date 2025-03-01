@@ -42,6 +42,7 @@ joinBtn.addEventListener('click', () => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
           if (lobby.passcode === "") {
+            // Directly join if no passcode is required.
             btn.addEventListener('click', () => {
               socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
             });
@@ -71,11 +72,13 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
+  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
+  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -165,8 +168,8 @@ function updatePlayerList(playersArr) {
 // --- Dash hint update function ---
 // Reveal schedule:
 // Single word: ≤50 sec: reveal letter1, ≤30: letter2, ≤10: letter3.
-// Two words: ≤50: reveal first letter of word1, ≤30: reveal first letter of word2, ≤10: reveal second letter of word1.
-// Three words: ≤50: reveal first letter of word1, ≤30: reveal first letter of word2, ≤10: reveal first letter of word3.
+// Two words: ≤50: first letter of word1, ≤30: first letter of word2, ≤10: second letter of word1.
+// Three words: ≤50: first letter of word1, ≤30: first letter of word2, ≤10: first letter of word3.
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -276,13 +279,15 @@ const countdownDisplay = document.getElementById('countdownDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
 socket.on('turnStarted', (data) => {
+  // data contains currentDrawer, duration, currentDrawerRank, currentDrawerName
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
+    // For the drawing player, show the object selection prompt.
     turnPrompt.style.display = 'flex';
   } else {
     isMyTurn = false;
-    // Show a message including the player's rank and name.
+    // For non-drawing players, show a message indicating who is choosing.
     turnPrompt.style.display = 'flex';
     promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
     turnOptionsDiv.innerHTML = "";
@@ -320,15 +325,12 @@ socket.on('objectSelection', (data) => {
   }
 });
 
-// When the drawing player chooses an object, non-drawing players hide the turn prompt countdown.
+// When the drawing player chooses an object, broadcast it so non-drawing players can show dash hint.
+// Also hide the turn prompt for non-drawing players.
 socket.on('objectChosenBroadcast', (data) => {
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
-  // Hide the turn prompt for non-drawing players
-  if (!isMyTurn) {
-    turnPrompt.style.display = 'none';
-  }
 });
 
 socket.on('drawPhaseStarted', (data) => {
@@ -341,6 +343,8 @@ socket.on('drawPhaseStarted', (data) => {
     drawControlsDiv.style.display = 'block';
   } else {
     isMyTurn = false;
+    // Hide the turn prompt for non-drawing players once the object is chosen.
+    turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
     drawControlsDiv.style.display = 'none';
@@ -479,6 +483,7 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
 });
 
 // --- Keyboard adjustments ---
+// Using the on-screen keyboard should only trigger a layout resize, not clear the canvas.
 chatInput.addEventListener('focus', () => {
   resizeLayout();
 });
