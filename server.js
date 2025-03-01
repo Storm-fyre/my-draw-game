@@ -8,129 +8,146 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from public folder
 app.use(express.static('public'));
 
-// In‑memory data
-let players = [];
-let messages = []; // store last 15 messages
-let drawingData = []; // store drawing strokes for new clients
-let currentTurnIndex = -1; // index of the player whose turn it is
+let players = {}; // { socket.id: { nickname } }
+let playerOrder = []; // keeps the order of players
+let chatMessages = []; // stores the last 15 messages
+const MAX_CHAT_MESSAGES = 15;
 
-// Countdown timer variables
-let countdownInterval = null;
-let countdownValue = 10;
+let currentDrawer = null;
+let turnTimer = null;
+const TURN_DURATION = 10; // seconds
 
-// Start a countdown for the current drawing turn
-function startCountdown() {
-  countdownValue = 10;
-  if (countdownInterval) clearInterval(countdownInterval);
-  io.emit('countdown', countdownValue);
-  countdownInterval = setInterval(() => {
-    countdownValue--;
-    if (countdownValue <= 0) {
-      clearInterval(countdownInterval);
-      // Auto-skip turn: clear canvas and move to next player
-      drawingData = [];
-      io.emit('clearCanvas');
-      if (players.length > 0) {
-        currentTurnIndex = (currentTurnIndex + 1) % players.length;
-        io.emit('turn', players[currentTurnIndex]);
-      }
-      startCountdown();
-    } else {
-      io.emit('countdown', countdownValue);
+// Helper: start the next player's turn
+function startNextTurn() {
+  if(turnTimer) {
+    clearInterval(turnTimer);
+    turnTimer = null;
+  }
+  // Clear the canvas for all players
+  io.emit('clearCanvas');
+  // Choose next drawer
+  if(playerOrder.length === 0) {
+    currentDrawer = null;
+    return;
+  }
+  let currentIndex = playerOrder.indexOf(currentDrawer);
+  if(currentIndex === -1 || currentIndex === playerOrder.length - 1) {
+    currentDrawer = playerOrder[0];
+  } else {
+    currentDrawer = playerOrder[currentIndex + 1];
+  }
+  // Inform everyone about the new turn
+  io.emit('turnStarted', { currentDrawer, duration: TURN_DURATION });
+  let timeLeft = TURN_DURATION;
+  turnTimer = setInterval(() => {
+    timeLeft--;
+    io.emit('turnCountdown', timeLeft);
+    if(timeLeft <= 0) {
+      clearInterval(turnTimer);
+      turnTimer = null;
+      io.to(currentDrawer).emit('turnTimeout');
+      startNextTurn();
     }
   }, 1000);
 }
 
 io.on('connection', (socket) => {
-  console.log('A user connected: ' + socket.id);
+  console.log(`User connected: ${socket.id}`);
 
-  // When a player joins with a nickname
-  socket.on('join', (nickname) => {
-    console.log('Player joined: ' + nickname);
-    players.push({ id: socket.id, nickname });
-    socket.nickname = nickname;
-
-    // Send current messages, players, and drawing history to the new client
-    socket.emit('init', { messages, players, drawingData });
-
-    // Notify all players with the updated player list
-    io.emit('playerList', players);
-
-    // If no turn is active, start with the first player
-    if (currentTurnIndex === -1) {
-      currentTurnIndex = 0;
-      io.emit('turn', players[currentTurnIndex]);
-      startCountdown();
+  // When a player sets their nickname
+  socket.on('setNickname', (nickname) => {
+    players[socket.id] = { nickname };
+    playerOrder.push(socket.id);
+    // Send initial data to this player
+    socket.emit('init', {
+      players: Object.values(players).map(p => p.nickname),
+      chatMessages
+    });
+    // Update player list for everyone
+    io.emit('updatePlayers', Object.values(players).map(p => p.nickname));
+    // If no current drawer, start with this player
+    if (!currentDrawer) {
+      currentDrawer = socket.id;
+      io.emit('turnStarted', { currentDrawer, duration: TURN_DURATION });
+      let timeLeft = TURN_DURATION;
+      turnTimer = setInterval(() => {
+        timeLeft--;
+        io.emit('turnCountdown', timeLeft);
+        if(timeLeft <= 0) {
+          clearInterval(turnTimer);
+          turnTimer = null;
+          io.to(currentDrawer).emit('turnTimeout');
+          startNextTurn();
+        }
+      }, 1000);
     }
   });
 
-  // Relay drawing events to other clients and save for new players
+  // Handle chat messages
+  socket.on('chatMessage', (message) => {
+    const nickname = players[socket.id] ? players[socket.id].nickname : 'Unknown';
+    const chatData = { nickname, message };
+    chatMessages.push(chatData);
+    if (chatMessages.length > MAX_CHAT_MESSAGES) {
+      chatMessages.shift();
+    }
+    io.emit('chatMessage', chatData);
+  });
+
+  // Broadcast drawing data only if from the current drawer
   socket.on('drawing', (data) => {
-    drawingData.push(data);
-    socket.broadcast.emit('drawing', data);
+    if (socket.id === currentDrawer) {
+      socket.broadcast.emit('drawing', data);
+    }
   });
 
-  // Clear canvas request (by drawing player or auto-skip)
-  socket.on('clearCanvas', () => {
-    drawingData = [];
-    io.emit('clearCanvas');
-  });
-
-  // Undo last stroke (simple implementation: remove last drawing data point)
+  // Undo last stroke
   socket.on('undo', () => {
-    if (drawingData.length > 0) {
-      drawingData.pop();
+    if (socket.id === currentDrawer) {
       io.emit('undo');
-      io.emit('redraw', drawingData);
     }
   });
 
-  // Messaging: add message to list (keeps last 15 only) and broadcast
-  socket.on('message', (msg) => {
-    const message = { nickname: socket.nickname, text: msg, time: new Date().toISOString() };
-    messages.push(message);
-    if (messages.length > 15) messages.shift();
-    io.emit('message', message);
+  // Clear the canvas
+  socket.on('clear', () => {
+    if (socket.id === currentDrawer) {
+      io.emit('clearCanvas');
+    }
   });
 
-  // Turn actions: "draw", "skip" or "giveup"
-  socket.on('turnAction', (action) => {
-    // Ensure only the player whose turn it is can take action
-    if (players[currentTurnIndex] && players[currentTurnIndex].id === socket.id) {
-      if (action === 'skip' || action === 'giveup') {
-        if (countdownInterval) clearInterval(countdownInterval);
-        drawingData = [];
+  // Give up turn
+  socket.on('giveUp', () => {
+    if (socket.id === currentDrawer) {
+      io.emit('clearCanvas');
+      startNextTurn();
+    }
+  });
+
+  // Turn decision (draw or skip)
+  socket.on('turnDecision', (decision) => {
+    if (socket.id === currentDrawer) {
+      if (decision === 'skip') {
         io.emit('clearCanvas');
-        currentTurnIndex = (currentTurnIndex + 1) % players.length;
-        io.emit('turn', players[currentTurnIndex]);
-        startCountdown();
-      } else if (action === 'draw') {
-        // Confirm drawing: for now we just clear the countdown (can be extended as needed)
-        if (countdownInterval) clearInterval(countdownInterval);
+        startNextTurn();
       }
+      // If "draw", the player continues – no additional action here.
     }
   });
 
-  // Handle disconnection: update players and adjust turn if needed
+  // When a player disconnects
   socket.on('disconnect', () => {
-    console.log('User disconnected: ' + socket.id);
-    players = players.filter(p => p.id !== socket.id);
-    io.emit('playerList', players);
-    if (players.length === 0) {
-      currentTurnIndex = -1;
-      if (countdownInterval) clearInterval(countdownInterval);
-    } else {
-      if (currentTurnIndex >= players.length) currentTurnIndex = 0;
-      io.emit('turn', players[currentTurnIndex]);
-      if (countdownInterval) clearInterval(countdownInterval);
-      startCountdown();
+    console.log(`User disconnected: ${socket.id}`);
+    delete players[socket.id];
+    playerOrder = playerOrder.filter(id => id !== socket.id);
+    io.emit('updatePlayers', Object.values(players).map(p => p.nickname));
+    if (socket.id === currentDrawer) {
+      startNextTurn();
     }
   });
 });
 
 server.listen(PORT, () => {
-  console.log('Server is running on port ' + PORT);
+  console.log(`Server is running on port ${PORT}`);
 });

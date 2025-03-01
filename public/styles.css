@@ -1,0 +1,162 @@
+/* General styles */
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+  background-color: #e0f2e9; /* light green hue */
+}
+
+#gameContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Modal for nickname input */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Canvas container */
+#canvasContainer {
+  position: relative;
+  background-color: #fff;
+}
+
+/* The canvas is set to 100% width; its height will be set via JS to ensure it’s square */
+#drawCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Tools bar at the bottom of the canvas */
+#toolsBar {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  right: 5px;
+  display: flex;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.8);
+  padding: 5px;
+  border-radius: 5px;
+}
+
+/* Brush thickness buttons */
+#brushThickness button {
+  margin: 0 2px;
+}
+
+/* Brush color buttons */
+#brushColors button {
+  margin: 0 2px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Draw controls (Undo, Clear, Give Up) */
+#drawControls {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  display: flex;
+  gap: 5px;
+}
+
+/* Turn prompt overlay */
+#turnPrompt {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,128,0,0.3);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+#turnPrompt #turnMessage {
+  background: rgba(255,255,255,0.9);
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Box container for chat/player list */
+#boxContainer {
+  flex: 1;
+  background-color: #c8e6c9; /* lighter green */
+  display: flex;
+  flex-direction: column;
+}
+
+#boxHeader {
+  display: flex;
+  justify-content: flex-end;
+  padding: 5px;
+}
+
+#toggleBox {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#boxContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 5px;
+  background-color: #a5d6a7;
+}
+
+.boxView {
+  font-size: 16px; /* fixed font size for messages and players */
+}
+
+/* Chat input area */
+#chatInputContainer {
+  display: flex;
+  padding: 5px;
+  background-color: #81c784;
+}
+
+#chatInput {
+  flex: 1;
+  padding: 5px;
+  border: none;
+  border-radius: 4px;
+}
+
+#sendChat {
+  background-color: #388e3c;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  margin-left: 5px;
+  border-radius: 4px;
+}
