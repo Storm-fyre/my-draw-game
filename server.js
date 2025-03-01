@@ -187,6 +187,8 @@ io.on('connection', (socket) => {
       state.currentObject = objectChosen;
       state.guessedCorrectly = {};
       state.currentDrawTimeLeft = DRAW_DURATION;
+      // Broadcast the chosen object (for dash hint) to all players
+      io.to(lobbyName).emit('objectChosenBroadcast', { object: state.currentObject });
       io.to(lobbyName).emit('drawPhaseStarted', { currentDrawer: state.currentDrawer, duration: DRAW_DURATION });
       let timeLeft = DRAW_DURATION;
       state.turnTimer = setInterval(() => {
@@ -244,6 +246,13 @@ io.on('connection', (socket) => {
     }
   });
   
+  socket.on('strokeComplete', (data) => {
+    const lobbyName = socket.lobby;
+    if (!lobbyName || !activeLobbies[lobbyName]) return;
+    // Broadcast the complete stroke so non-drawing players can store it.
+    socket.to(lobbyName).emit('strokeComplete', data);
+  });
+  
   socket.on('undo', () => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
@@ -259,7 +268,6 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     if (socket.id === state.currentDrawer) {
       io.to(lobbyName).emit('clearCanvas');
-      // The client will clear the drawn strokes (and they should clear their stored paths)
     }
   });
   

@@ -3,10 +3,17 @@ const socket = io();
 let nickname = "";
 let isDrawing = false;
 let currentPath = [];
-let paths = []; // stored strokes (used for undo and redrawing)
+let paths = []; // stored complete strokes (for redrawing)
 let currentColor = "#000000";
 let currentThickness = 4;
 let isMyTurn = false;
+
+// For non-drawing players: store the current remote stroke (in progress)
+let currentRemoteStroke = null;
+
+// For dash hint (object reveal)
+let currentObjectStr = null;
+let currentDrawTime = null;
 
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
@@ -73,13 +80,17 @@ socket.on('lobbyError', (data) => {
 // --- Canvas setup ---
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
+const dashHintDiv = document.getElementById('dashHint');
 
-// Function to redraw strokes (does not clear stored paths)
+// Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   paths.forEach(stroke => {
     drawStroke(stroke, false);
   });
+  if (currentRemoteStroke) {
+    drawStroke(currentRemoteStroke, false);
+  }
 }
 
 // Dynamic layout: canvas remains square; bottom box adjusts accordingly.
@@ -97,8 +108,8 @@ function resizeLayout() {
   const boxHeight = totalHeight - width;
   boxContainer.style.height = boxHeight + "px";
 
-  // Redraw strokes without clearing stored paths
   redrawStrokes();
+  updateDashHint();
 }
 
 window.addEventListener('resize', resizeLayout);
@@ -147,6 +158,121 @@ function updatePlayerList(playersArr) {
   });
 }
 
+// --- Dash hint update function ---
+// This function computes the dash hint based on the current object and remaining drawing time.
+// Reveal schedule:
+// Single word: at time<=50: reveal letter1, at <=30: reveal letter2, at <=10: reveal letter3.
+// Two words: at <=50: reveal first letter of word1, at <=30: reveal first letter of word2, at <=10: reveal second letter of word1.
+// Three words: at <=50: reveal first letter of word1, at <=30: reveal first letter of word2, at <=10: reveal first letter of word3.
+function updateDashHint() {
+  // Only for non-drawing players and when an object has been chosen.
+  if (isMyTurn || !currentObjectStr) {
+    dashHintDiv.textContent = "";
+    return;
+  }
+  let words = currentObjectStr.split(' ');
+  let hintWords = [];
+  
+  // Helper: generate dashes for a word
+  function dashes(n) {
+    return "_".repeat(n).split("").join(" ");
+  }
+  
+  if (words.length === 1) {
+    let word = words[0];
+    let revealed = "";
+    if (currentDrawTime <= 50) {
+      revealed = word.charAt(0);
+    }
+    if (currentDrawTime <= 30 && word.length > 1) {
+      revealed += word.charAt(1);
+    }
+    if (currentDrawTime <= 10 && word.length > 2) {
+      revealed += word.charAt(2);
+    }
+    let display = "";
+    for (let i = 0; i < word.length; i++) {
+      if (i < revealed.length) {
+        display += word.charAt(i) + " ";
+      } else {
+        display += "_ ";
+      }
+    }
+    hintWords.push(display.trim());
+  } else if (words.length === 2) {
+    let word1 = words[0], word2 = words[1];
+    let r1 = "", r2 = "";
+    if (currentDrawTime <= 50) {
+      r1 = word1.charAt(0);
+    }
+    if (currentDrawTime <= 30) {
+      r2 = word2.charAt(0);
+    }
+    if (currentDrawTime <= 10 && word1.length > 1) {
+      r1 += word1.charAt(1);
+    }
+    let disp1 = "";
+    for (let i = 0; i < word1.length; i++) {
+      if (i < r1.length) {
+        disp1 += word1.charAt(i) + " ";
+      } else {
+        disp1 += "_ ";
+      }
+    }
+    let disp2 = "";
+    for (let i = 0; i < word2.length; i++) {
+      if (i < r2.length) {
+        disp2 += word2.charAt(i) + " ";
+      } else {
+        disp2 += "_ ";
+      }
+    }
+    hintWords.push(disp1.trim());
+    hintWords.push(disp2.trim());
+  } else if (words.length === 3) {
+    let word1 = words[0], word2 = words[1], word3 = words[2];
+    let r1 = "", r2 = "", r3 = "";
+    if (currentDrawTime <= 50) {
+      r1 = word1.charAt(0);
+    }
+    if (currentDrawTime <= 30) {
+      r2 = word2.charAt(0);
+    }
+    if (currentDrawTime <= 10) {
+      r3 = word3.charAt(0);
+    }
+    let disp1 = "";
+    for (let i = 0; i < word1.length; i++) {
+      if (i < r1.length) {
+        disp1 += word1.charAt(i) + " ";
+      } else {
+        disp1 += "_ ";
+      }
+    }
+    let disp2 = "";
+    for (let i = 0; i < word2.length; i++) {
+      if (i < r2.length) {
+        disp2 += word2.charAt(i) + " ";
+      } else {
+        disp2 += "_ ";
+      }
+    }
+    let disp3 = "";
+    for (let i = 0; i < word3.length; i++) {
+      if (i < r3.length) {
+        disp3 += word3.charAt(i) + " ";
+      } else {
+        disp3 += "_ ";
+      }
+    }
+    hintWords.push(disp1.trim());
+    hintWords.push(disp2.trim());
+    hintWords.push(disp3.trim());
+  }
+  // Join words with 3-space gap between sets.
+  dashHintDiv.textContent = hintWords.join("   ");
+}
+
 // --- Socket events ---
 socket.on('init', (data) => {
   data.chatMessages.forEach(msg => {
@@ -164,14 +290,27 @@ socket.on('updatePlayers', (playersArr) => {
 });
 
 socket.on('drawing', (data) => {
-  drawStroke(data, false);
+  // For non-drawing players, update the current remote stroke
+  if (!isMyTurn) {
+    currentRemoteStroke = data;
+    redrawStrokes();
+  }
+});
+
+socket.on('strokeComplete', (data) => {
+  // When a complete stroke is received from the drawing player, add it permanently.
+  if (!isMyTurn) {
+    paths.push(data);
+    currentRemoteStroke = null;
+    redrawStrokes();
+  }
 });
 
 socket.on('clearCanvas', () => {
-  // When a clearCanvas event is received (only on explicit clear/giveUp/timeout),
-  // clear the canvas and empty stored strokes.
+  // When clearCanvas is received, clear the canvas and stored strokes.
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   paths = [];
+  currentRemoteStroke = null;
 });
 
 socket.on('undo', () => {
@@ -188,11 +327,12 @@ const drawCountdown = document.getElementById('drawCountdown');
 socket.on('turnStarted', (data) => {
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
-    // Wait for objectSelection event to display options.
+    // Drawing player: no dash hint needed.
+    dashHintDiv.textContent = "";
   } else {
     isMyTurn = false;
-    turnPrompt.style.display = 'none';
   }
+  turnPrompt.style.display = (data.currentDrawer === socket.id) ? 'flex' : 'none';
 });
 
 socket.on('turnCountdown', (timeLeft) => {
@@ -206,7 +346,6 @@ socket.on('turnTimeout', () => {
   isMyTurn = false;
 });
 
-// Object selection: show three buttons for the drawer.
 socket.on('objectSelection', (data) => {
   if(data.options && data.options.length > 0) {
     isMyTurn = true;
@@ -226,6 +365,14 @@ socket.on('objectSelection', (data) => {
   }
 });
 
+// When the drawing player chooses an object, broadcast it so non-drawing players can show the dash hint.
+socket.on('objectChosenBroadcast', (data) => {
+  currentObjectStr = data.object;
+  // Set initial draw phase time for hint purposes
+  currentDrawTime = DRAW_DURATION;
+  updateDashHint();
+});
+
 // Draw phase events
 socket.on('drawPhaseStarted', (data) => {
   if(data.currentDrawer === socket.id) {
@@ -233,21 +380,26 @@ socket.on('drawPhaseStarted', (data) => {
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
+    // Drawing player sees no dash hint.
+    dashHintDiv.textContent = "";
   } else {
     isMyTurn = false;
-    drawCountdown.style.display = 'none';
+    drawCountdown.style.display = 'block';
+    drawCountdown.textContent = data.duration;
   }
 });
 
 socket.on('drawPhaseCountdown', (timeLeft) => {
-  if(drawCountdown.style.display !== 'none') {
-    drawCountdown.textContent = timeLeft;
-  }
+  currentDrawTime = timeLeft;
+  drawCountdown.textContent = timeLeft;
+  updateDashHint();
 });
 
 socket.on('drawPhaseTimeout', () => {
   drawCountdown.style.display = 'none';
   isMyTurn = false;
+  // Clear dash hint after time runs out.
+  dashHintDiv.textContent = "";
 });
 
 // --- Drawing functions ---
@@ -283,7 +435,10 @@ function drawingMove(e) {
 function stopDrawing(e) {
   if (!isMyTurn) return;
   if(isDrawing) {
-    paths.push({ path: currentPath, color: currentColor, thickness: currentThickness });
+    // For drawing player, add the complete stroke locally and emit to non-drawing players.
+    let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
+    paths.push(stroke);
+    socket.emit('strokeComplete', stroke);
   }
   isDrawing = false;
 }
@@ -352,6 +507,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
     socket.emit('clear');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
+    currentRemoteStroke = null;
   }
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
@@ -359,8 +515,10 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
     socket.emit('giveUp');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
+    currentRemoteStroke = null;
     isMyTurn = false;
     drawCountdown.style.display = 'none';
+    dashHintDiv.textContent = "";
   }
 });
 
