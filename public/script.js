@@ -3,7 +3,7 @@ const socket = io();
 let nickname = "";
 let isDrawing = false;
 let currentPath = [];
-let paths = []; // for storing strokes (for undo)
+let paths = []; // For storing strokes (for undo)
 let currentColor = "#000000";
 let currentThickness = 4;
 let isMyTurn = false;
@@ -14,7 +14,7 @@ const joinBtn = document.getElementById('joinBtn');
 
 joinBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
-  if(name) {
+  if (name) {
     nickname = name;
     socket.emit('setNickname', nickname);
     nicknameModal.style.display = 'none';
@@ -32,17 +32,14 @@ function resizeLayout() {
   const canvasContainer = document.getElementById('canvasContainer');
 
   const width = gameContainer.clientWidth;
-  // Set canvas to be a square with side equal to width
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
 
-  // Remaining height goes to the bottom box
   const totalHeight = gameContainer.clientHeight;
   const boxHeight = totalHeight - width;
   boxContainer.style.height = boxHeight + "px";
 
-  // Redraw canvas content on resize to adjust scaling
   redrawAll();
 }
 
@@ -56,7 +53,7 @@ const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
 
 toggleBoxBtn.addEventListener('click', () => {
-  if(chatBox.style.display === 'none') {
+  if (chatBox.style.display === 'none') {
     chatBox.style.display = 'block';
     playerBox.style.display = 'none';
   } else {
@@ -71,7 +68,7 @@ const sendChatBtn = document.getElementById('sendChat');
 
 sendChatBtn.addEventListener('click', () => {
   const msg = chatInput.value.trim();
-  if(msg) {
+  if (msg) {
     socket.emit('chatMessage', msg);
     chatInput.value = '';
   }
@@ -85,12 +82,12 @@ function addChatMessage(data) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// Update the players list
+// Update the players list (displaying nickname and score)
 function updatePlayerList(players) {
   playerBox.innerHTML = "";
-  players.forEach(name => {
+  players.forEach(player => {
     const p = document.createElement('p');
-    p.textContent = name;
+    p.textContent = `${player.nickname} (${player.score})`;
     playerBox.appendChild(p);
   });
 }
@@ -111,7 +108,7 @@ socket.on('updatePlayers', (players) => {
   updatePlayerList(players);
 });
 
-// Handle drawing events coming from the server
+// Handle drawing events from the server
 socket.on('drawing', (data) => {
   drawStroke(data, false);
 });
@@ -124,41 +121,67 @@ socket.on('undo', () => {
   undoLastStroke();
 });
 
-// Turn events: show prompt if it’s your turn (decision phase)
+// Turn events and object selection UI
 const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const countdownDisplay = document.getElementById('countdownDisplay');
-const drawBtn = document.getElementById('drawBtn');
-const skipBtn = document.getElementById('skipBtn');
 const drawCountdown = document.getElementById('drawCountdown');
 
 socket.on('turnStarted', (data) => {
-  if(data.currentDrawer === socket.id) {
+  if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'flex';
-    drawCountdown.style.display = 'none';
-    promptText.textContent = "Your turn! Choose:";
+    promptText.textContent = "Choose an object to draw:";
+    // Remove any existing object options buttons
+    const optionsDiv = document.getElementById('objectOptions');
+    if (optionsDiv) {
+      optionsDiv.remove();
+    }
+    countdownDisplay.style.display = 'block';
     countdownDisplay.textContent = data.duration;
+    drawCountdown.style.display = 'none';
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'none';
+    drawCountdown.style.display = 'none';
   }
 });
 
 socket.on('turnCountdown', (timeLeft) => {
-  if(turnPrompt.style.display !== 'none') {
+  if (turnPrompt.style.display !== 'none') {
     countdownDisplay.textContent = timeLeft;
   }
 });
 
-socket.on('turnTimeout', () => {
+socket.on('objectOptions', (data) => {
+  if (isMyTurn) {
+    let optionsDiv = document.createElement('div');
+    optionsDiv.id = 'objectOptions';
+    data.options.forEach(option => {
+      let btn = document.createElement('button');
+      btn.textContent = option;
+      btn.addEventListener('click', () => {
+        socket.emit('objectChosen', option);
+        optionsDiv.remove();
+      });
+      optionsDiv.appendChild(btn);
+    });
+    turnPrompt.appendChild(optionsDiv);
+  }
+});
+
+socket.on('objectSelectionTimeout', () => {
   turnPrompt.style.display = 'none';
   isMyTurn = false;
 });
 
-// Draw phase events
+socket.on('objectChosen', (data) => {
+  addChatMessage({ nickname: 'System', message: `${data.currentDrawer} chose "${data.chosenObject}" to draw.` });
+  turnPrompt.style.display = 'none';
+});
+
 socket.on('drawPhaseStarted', (data) => {
-  if(data.currentDrawer === socket.id) {
+  if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
@@ -170,7 +193,7 @@ socket.on('drawPhaseStarted', (data) => {
 });
 
 socket.on('drawPhaseCountdown', (timeLeft) => {
-  if(drawCountdown.style.display !== 'none') {
+  if (drawCountdown.style.display !== 'none') {
     drawCountdown.textContent = timeLeft;
   }
 });
@@ -180,26 +203,11 @@ socket.on('drawPhaseTimeout', () => {
   isMyTurn = false;
 });
 
-// Turn decision buttons
-drawBtn.addEventListener('click', () => {
-  if(isMyTurn) {
-    socket.emit('turnDecision', 'draw');
-    // The decision phase UI will be replaced by draw phase UI upon receiving drawPhaseStarted event
-  }
-});
-skipBtn.addEventListener('click', () => {
-  if(isMyTurn) {
-    socket.emit('turnDecision', 'skip');
-    turnPrompt.style.display = 'none';
-    isMyTurn = false;
-  }
-});
-
-// Normalize pointer position to relative coordinates (0 to 1)
+// Drawing functionality with normalized coordinates
 function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
-  if(e.touches && e.touches.length > 0) {
+  if (e.touches && e.touches.length > 0) {
     x = e.touches[0].clientX - rect.left;
     y = e.touches[0].clientY - rect.top;
   } else {
@@ -227,7 +235,7 @@ function drawingMove(e) {
 
 function stopDrawing(e) {
   if (!isMyTurn) return;
-  if(isDrawing) {
+  if (isDrawing) {
     paths.push({ path: currentPath, color: currentColor, thickness: currentThickness });
   }
   isDrawing = false;
@@ -244,20 +252,19 @@ canvas.addEventListener('touchend', (e) => { stopDrawing(e); });
 
 // Draw stroke with smooth quadratic curves using normalized coordinates
 function drawStroke(data, emitLocal) {
-  if(!data.path || data.path.length < 2) return;
+  if (!data.path || data.path.length < 2) return;
   ctx.strokeStyle = data.color;
   ctx.lineWidth = data.thickness;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
   ctx.beginPath();
-  // Convert normalized coordinate to actual pixel position
   ctx.moveTo(data.path[0].x * canvas.width, data.path[0].y * canvas.height);
-  for(let i = 1; i < data.path.length - 1; i++) {
+  for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
-    const x_next = data.path[i+1].x * canvas.width;
-    const y_next = data.path[i+1].y * canvas.height;
+    const x_next = data.path[i + 1].x * canvas.width;
+    const y_next = data.path[i + 1].y * canvas.height;
     const midX = (x_i + x_next) / 2;
     const midY = (y_i + y_next) / 2;
     ctx.quadraticCurveTo(x_i, y_i, midX, midY);
@@ -302,23 +309,21 @@ colorButtons.forEach(btn => {
 
 // Draw control buttons
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if(isMyTurn) {
+  if (isMyTurn) {
     socket.emit('undo');
     undoLastStroke();
   }
 });
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if(isMyTurn) {
+  if (isMyTurn) {
     socket.emit('clear');
     clearCanvas();
   }
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
-  if(isMyTurn) {
+  if (isMyTurn) {
     socket.emit('giveUp');
     clearCanvas();
-    isMyTurn = false;
-    drawCountdown.style.display = 'none';
   }
 });
 
