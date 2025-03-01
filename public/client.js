@@ -3,12 +3,12 @@ const socket = io();
 // DOM Elements
 let nicknamePrompt, nicknameInput, joinBtn;
 let gameContainer;
-let turnInfo, countdownBar, countdownFill, countdownNumber;
+let countdownOverlay;
 let decisionButtons, drawBtn, skipBtn;
 let drawingTools, colorSelect, thicknessSelect, undoBtn, clearBtn, giveUpBtn;
+let toggleBtn;
 let myCanvas, ctx;
-let chatBox, chatInput, chatSendBtn;
-let playersList;
+let chatBox, playersBox, chatInput, chatSendBtn;
 
 // State variables
 let username = null;
@@ -20,9 +20,9 @@ let isDrawingPhase = false;
 let currentColor = '#000000';
 let currentThickness = 1;
 
-// For partial drawing
+// For drawing
 let drawing = false;
-let pathPoints = [];  // array of {x,y}
+let pathPoints = [];
 let lastX, lastY;
 
 // Strokes from server for re-draw
@@ -35,10 +35,7 @@ window.addEventListener('load', () => {
   joinBtn = document.getElementById('joinBtn');
 
   gameContainer = document.getElementById('gameContainer');
-  turnInfo = document.getElementById('turnInfo');
-  countdownBar = document.getElementById('countdownBar');
-  countdownFill = document.getElementById('countdownFill');
-  countdownNumber = document.getElementById('countdownNumber');
+  countdownOverlay = document.getElementById('countdownOverlay');
 
   decisionButtons = document.getElementById('decisionButtons');
   drawBtn = document.getElementById('drawBtn');
@@ -51,26 +48,24 @@ window.addEventListener('load', () => {
   clearBtn = document.getElementById('clearBtn');
   giveUpBtn = document.getElementById('giveUpBtn');
 
+  toggleBtn = document.getElementById('toggleBtn');
+
   myCanvas = document.getElementById('myCanvas');
   ctx = myCanvas.getContext('2d');
 
   chatBox = document.getElementById('chatBox');
+  playersBox = document.getElementById('playersBox');
   chatInput = document.getElementById('chatInput');
   chatSendBtn = document.getElementById('chatSendBtn');
-
-  playersList = document.getElementById('playersList');
 
   // Hide main container initially
   gameContainer.style.display = 'none';
 
-  // Adjust canvas size: make it square based on the available space in #canvasWrapper.
+  // Adjust canvas size to match its container (so the internal coordinate system matches)
   function adjustCanvasSize() {
     const canvasWrapper = document.getElementById('canvasWrapper');
-    const availableWidth = canvasWrapper.clientWidth;
-    const availableHeight = canvasWrapper.clientHeight;
-    const size = Math.min(availableWidth, availableHeight);
-    myCanvas.width = size;
-    myCanvas.height = size;
+    myCanvas.width = canvasWrapper.clientWidth;
+    myCanvas.height = canvasWrapper.clientHeight;
     redrawCanvas();
   }
   window.addEventListener('resize', adjustCanvasSize);
@@ -82,22 +77,33 @@ window.addEventListener('load', () => {
     if (name) {
       username = name;
       socket.emit('joinGame', username);
-
       nicknamePrompt.style.display = 'none';
       gameContainer.style.display = 'flex';
-      // Ensure canvas is correctly sized when game starts
       adjustCanvasSize();
     }
   });
 
-  // Adjust layout when the chat input is focused (typing mode)
+  // Toggle between Chat and Players view in the bottom section
+  toggleBtn.addEventListener('click', () => {
+    if (chatBox.style.display !== 'none') {
+      chatBox.style.display = 'none';
+      playersBox.style.display = 'block';
+      toggleBtn.textContent = 'Show Messages';
+    } else {
+      chatBox.style.display = 'block';
+      playersBox.style.display = 'none';
+      toggleBtn.textContent = 'Show Players';
+    }
+  });
+
+  // Typing mode: adjust layout when chat input is focused
   chatInput.addEventListener('focus', () => {
     gameContainer.classList.add('typing');
-    adjustCanvasSize(); // Re-adjust in case container changes
+    adjustCanvasSize();
   });
   chatInput.addEventListener('blur', () => {
     gameContainer.classList.remove('typing');
-    adjustCanvasSize(); // Re-adjust in case container changes
+    adjustCanvasSize();
   });
 
   // Decision buttons
@@ -108,14 +114,13 @@ window.addEventListener('load', () => {
     socket.emit('drawChoice', 'skip');
   });
 
-  // Toolbox settings
+  // Drawing tools
   colorSelect.addEventListener('change', (e) => {
     currentColor = e.target.value;
   });
   thicknessSelect.addEventListener('change', (e) => {
     currentThickness = parseInt(e.target.value, 10);
   });
-
   undoBtn.addEventListener('click', () => {
     socket.emit('undoStroke');
   });
@@ -180,24 +185,18 @@ window.addEventListener('load', () => {
   }
   function moveDrawing(clientX, clientY) {
     const { x, y } = getCanvasCoords(clientX, clientY);
-
-    // Emit partial drawing segment
     socket.emit('partialDrawing', {
       fromX: lastX, fromY: lastY, toX: x, toY: y,
       color: currentColor,
       thickness: currentThickness
     });
-
-    // Draw segment locally with partial opacity
     drawSegment(lastX, lastY, x, y, currentColor, currentThickness, 0.4);
-
     pathPoints.push({ x, y });
     lastX = x;
     lastY = y;
   }
   function endDrawing() {
     drawing = false;
-    // Emit the final stroke
     socket.emit('strokeComplete', {
       path: pathPoints,
       color: currentColor,
@@ -219,7 +218,7 @@ window.addEventListener('load', () => {
   }
 
   /* ======================== SOCKET EVENTS ======================== */
-
+  
   socket.on('initCanvas', (allStrokes) => {
     strokes = allStrokes;
     redrawCanvas();
@@ -228,18 +227,16 @@ window.addEventListener('load', () => {
     chatBox.innerHTML = '';
     messages.forEach((msg) => appendChat(msg.username, msg.text));
   });
-
+  
   socket.on('partialDrawing', ({ fromX, fromY, toX, toY, color, thickness }) => {
-    // Draw partial segment from another user
     drawSegment(fromX, fromY, toX, toY, color || 'black', thickness || 1, 0.4);
   });
-
+  
   socket.on('strokeComplete', (stroke) => {
-    // Stroke format: { strokeId, path, color, thickness, drawerId }
     strokes.push(stroke);
     drawStroke(stroke);
   });
-
+  
   socket.on('removeStroke', (strokeId) => {
     const idx = strokes.findIndex(s => s.strokeId === strokeId);
     if (idx !== -1) {
@@ -247,90 +244,73 @@ window.addEventListener('load', () => {
       redrawCanvas();
     }
   });
-
+  
   socket.on('clearCanvas', () => {
     strokes = [];
     redrawCanvas();
   });
-
-  // Chat messages from server
+  
   socket.on('chatMessage', (msg) => {
     appendChat(msg.username, msg.text);
   });
-
-  // Turn info updates
-  socket.on('turnInfo', (data) => {
-    const { currentPlayerId, currentPlayerName, isDrawingPhase: drawingPhase, timeLeft } = data;
-    amICurrentDrawer = (socket.id === currentPlayerId);
-    isDecisionPhase = !drawingPhase;
-    isDrawingPhase = drawingPhase;
-
-    stopCountdown();
-
-    if (amICurrentDrawer && isDecisionPhase) {
-      turnInfo.textContent = "It's your turn! Decide if you want to draw.";
-      decisionButtons.style.display = 'flex';
-      drawingTools.style.display = 'none';
-      startCountdown(timeLeft, (remaining) => {
-        turnInfo.textContent = `You have ${remaining}s to choose: Draw or Skip`;
-      });
-    } else if (amICurrentDrawer && isDrawingPhase) {
-      turnInfo.textContent = 'You are drawing now!';
-      decisionButtons.style.display = 'none';
-      drawingTools.style.display = 'flex';
-      startCountdown(timeLeft, (remaining) => {
-        turnInfo.textContent = `Drawing! ${remaining}s left...`;
-      });
-    } else {
-      // Other player's turn
-      decisionButtons.style.display = 'none';
-      drawingTools.style.display = 'none';
-
-      if (isDecisionPhase) {
-        turnInfo.textContent = `${currentPlayerName} is deciding...`;
-      } else {
-        turnInfo.textContent = `${currentPlayerName} is drawing...`;
-      }
-      startCountdown(timeLeft, (remaining) => {
-        if (isDecisionPhase) {
-          turnInfo.textContent = `${currentPlayerName} is deciding... ${remaining}s left`;
-        } else {
-          turnInfo.textContent = `${currentPlayerName} is drawing... ${remaining}s left`;
-        }
-      });
-    }
-  });
-
-  // Update players list
+  
   socket.on('playersList', (players) => {
-    playersList.innerHTML = '';
+    playersBox.innerHTML = '';
     players.forEach((p) => {
       const div = document.createElement('div');
-      div.className = 'player-item';
       div.style.display = 'flex';
       div.style.alignItems = 'center';
       div.style.margin = '4px 0';
-
       const swatch = document.createElement('div');
-      swatch.className = 'player-color-swatch';
       swatch.style.width = '16px';
       swatch.style.height = '16px';
       swatch.style.borderRadius = '3px';
       swatch.style.marginRight = '6px';
       swatch.style.border = '1px solid #333';
       swatch.style.backgroundColor = p.color;
-
       const nameSpan = document.createElement('span');
       nameSpan.textContent = p.username;
-
       div.appendChild(swatch);
       div.appendChild(nameSpan);
-      playersList.appendChild(div);
+      playersBox.appendChild(div);
     });
   });
-
+  
+  socket.on('turnInfo', (data) => {
+    const { currentPlayerId, currentPlayerName, isDrawingPhase: drawingPhase, timeLeft } = data;
+    amICurrentDrawer = (socket.id === currentPlayerId);
+    isDecisionPhase = !drawingPhase;
+    isDrawingPhase = drawingPhase;
+  
+    stopCountdown();
+  
+    if (amICurrentDrawer && isDecisionPhase) {
+      decisionButtons.style.display = 'block';
+      drawingTools.style.display = 'none';
+      countdownOverlay.style.display = 'block';
+      countdownOverlay.textContent = timeLeft;
+      startCountdown(timeLeft, (remaining) => {
+        countdownOverlay.textContent = remaining;
+      });
+    } else if (amICurrentDrawer && isDrawingPhase) {
+      decisionButtons.style.display = 'none';
+      drawingTools.style.display = 'block';
+      countdownOverlay.style.display = 'none';
+      startCountdown(timeLeft, (remaining) => {
+        // Optional: update if needed
+      });
+    } else {
+      decisionButtons.style.display = 'none';
+      drawingTools.style.display = 'none';
+      countdownOverlay.style.display = 'none';
+      startCountdown(timeLeft, (remaining) => {
+        // Optional update for observers
+      });
+    }
+  });
+  
   /* ======================= HELPER FUNCTIONS ======================= */
-
+  
   function getCanvasCoords(clientX, clientY) {
     const rect = myCanvas.getBoundingClientRect();
     return {
@@ -338,8 +318,7 @@ window.addEventListener('load', () => {
       y: clientY - rect.top
     };
   }
-
-  // Draw a segment with optional alpha for partial strokes
+  
   function drawSegment(x1, y1, x2, y2, strokeStyle, thickness, alpha = 1.0) {
     ctx.save();
     ctx.strokeStyle = strokeStyle;
@@ -351,7 +330,7 @@ window.addEventListener('load', () => {
     ctx.stroke();
     ctx.restore();
   }
-
+  
   function drawStroke(stroke) {
     const { path, color, thickness } = stroke;
     if (!path || path.length < 2) return;
@@ -369,51 +348,39 @@ window.addEventListener('load', () => {
     ctx.stroke();
     ctx.restore();
   }
-
+  
   function redrawCanvas() {
     ctx.clearRect(0, 0, myCanvas.width, myCanvas.height);
     strokes.forEach(s => drawStroke(s));
   }
-
+  
   function appendChat(user, text) {
     const div = document.createElement('div');
     div.textContent = `${user}: ${text}`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
   }
-
-  // Countdown timer functions
+  
   function startCountdown(total, onTick) {
-    countdownBar.style.display = 'block';
-    countdownNumber.style.display = 'block';
-
     let secondsLeft = total;
-    updateCountdownBar(1);
-    updateCountdownNumber(secondsLeft);
-    onTick && onTick(secondsLeft);
-
+    updateCountdown(secondsLeft);
     countdownInterval = setInterval(() => {
       secondsLeft--;
       if (secondsLeft < 0) {
         stopCountdown();
       } else {
         onTick && onTick(secondsLeft);
-        const progress = secondsLeft / total;
-        updateCountdownBar(progress);
-        updateCountdownNumber(secondsLeft);
+        updateCountdown(secondsLeft);
       }
     }, 1000);
   }
+  
   function stopCountdown() {
     if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = null;
-    countdownBar.style.display = 'none';
-    countdownNumber.style.display = 'none';
   }
-  function updateCountdownBar(progress) {
-    countdownFill.style.width = (progress * 100) + '%';
-  }
-  function updateCountdownNumber(num) {
-    countdownNumber.textContent = num + 's';
+  
+  function updateCountdown(num) {
+    countdownOverlay.textContent = num + 's';
   }
 });
