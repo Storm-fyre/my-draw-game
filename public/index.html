@@ -12,12 +12,25 @@
     <div class="modal-content">
       <h2>Enter your nickname</h2>
       <input type="text" id="nicknameInput" placeholder="Nickname">
-      <button id="joinBtn">Join Game</button>
+      <button id="joinBtn">Next</button>
     </div>
   </div>
-
+  
+  <!-- Lobby modal -->
+  <div id="lobbyModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h2>Enter Lobby Information</h2>
+      <input type="text" id="lobbyNameInput" placeholder="Lobby Name">
+      <input type="password" id="lobbyPasscodeInput" placeholder="Passcode">
+      <button id="joinLobbyBtn">Join Lobby</button>
+    </div>
+  </div>
+  
+  <!-- Leaderboard overlay -->
+  <div id="leaderboardOverlay" class="leaderboardOverlay" style="display: none;"></div>
+  
   <!-- Main game container -->
-  <div id="gameContainer">
+  <div id="gameContainer" style="display: none;">
     <!-- Canvas container -->
     <div id="canvasContainer">
       <canvas id="drawCanvas"></canvas>
@@ -60,7 +73,7 @@
         <button id="clearBtn">Clear</button>
         <button id="giveUpBtn">Give Up</button>
       </div>
-      <!-- Turn prompt overlay (used for object selection in decision phase) -->
+      <!-- Turn prompt overlay (for object selection during decision phase) -->
       <div id="turnPrompt">
         <div id="turnMessage">
           <p id="promptText">Your turn! Choose an object:</p>

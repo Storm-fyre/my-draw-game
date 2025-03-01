@@ -13,7 +13,7 @@ body, html {
   height: 100%;
 }
 
-/* Modal for nickname input */
+/* Modal for nickname and lobby input */
 .modal {
   position: fixed;
   top: 0;
@@ -34,13 +34,30 @@ body, html {
   text-align: center;
 }
 
+/* Leaderboard overlay */
+.leaderboardOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,128,0,0.8);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  z-index: 200;
+}
+
 /* Canvas container */
 #canvasContainer {
   position: relative;
   background-color: #fff;
 }
 
-/* The canvas is set to 100% width; its height will be set via JS to ensure it’s square */
+/* The canvas is set to 100% width; its height is adjusted via JS */
 #drawCanvas {
   display: block;
   width: 100%;
@@ -84,7 +101,7 @@ body, html {
   gap: 5px;
 }
 
-/* Turn prompt overlay */
+/* Turn prompt overlay (for object selection) */
 #turnPrompt {
   position: absolute;
   top: 0;
@@ -95,6 +112,7 @@ body, html {
   display: none;
   align-items: center;
   justify-content: center;
+  z-index: 150;
 }
 
 #turnPrompt #turnMessage {
@@ -115,12 +133,13 @@ body, html {
   border-radius: 5px;
   font-size: 16px;
   display: none;
+  z-index: 150;
 }
 
 /* Box container for chat/player list */
 #boxContainer {
   flex: 1;
-  background-color: #c8e6c9; /* lighter green */
+  background-color: #c8e6c9;
   display: flex;
   flex-direction: column;
 }
@@ -148,7 +167,7 @@ body, html {
 }
 
 .boxView {
-  font-size: 16px; /* fixed font size for messages and players */
+  font-size: 16px;
 }
 
 /* Chat input area */
