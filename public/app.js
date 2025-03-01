@@ -1,202 +1,280 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const socket = io();
+const socket = io();
 
-  // Element references
-  const nicknameModal = document.getElementById('nicknameModal');
-  const nicknameInput = document.getElementById('nicknameInput');
-  const joinBtn = document.getElementById('joinBtn');
-  const drawingCanvas = document.getElementById('drawingCanvas');
-  const ctx = drawingCanvas.getContext('2d');
-  const thicknessButtons = document.querySelectorAll('.thickness');
-  const colorButtons = document.querySelectorAll('.color');
-  const chatForm = document.getElementById('chatForm');
-  const chatInput = document.getElementById('chatInput');
-  const messagesDiv = document.getElementById('messages');
-  const toggleBtn = document.getElementById('toggleBtn');
-  const messageBox = document.getElementById('messageBox');
-  const playerBox = document.getElementById('playerBox');
-  const playersDiv = document.getElementById('players');
+let nickname = "";
+let brushColor = "#000000";
+let brushThickness = 4;
 
-  let drawing = false;
-  let current = {
-    color: '#000000',
-    thickness: 2
+const drawingCanvas = document.getElementById("drawingCanvas");
+const ctx = drawingCanvas.getContext("2d");
+
+// Variables for drawing
+let drawing = false;
+let lastPos = { x: 0, y: 0 };
+let currentPath = [];
+let paths = []; // local history for undo
+
+// UI Elements
+const nicknameModal = document.getElementById("nicknameModal");
+const joinBtn = document.getElementById("joinBtn");
+const nicknameInput = document.getElementById("nicknameInput");
+const gameContainer = document.getElementById("gameContainer");
+
+const boxContent = document.getElementById("boxContent");
+const toggleBoxBtn = document.getElementById("toggleBox");
+const messageInput = document.getElementById("messageInput");
+const sendMsgBtn = document.getElementById("sendMsg");
+
+const brushButtons = document.querySelectorAll("#brushThickness button");
+const colorButtons = document.querySelectorAll("#colorOptions button");
+
+const turnOverlay = document.getElementById("turnOverlay");
+const currentPlayerSpan = document.getElementById("currentPlayer");
+const countdownSpan = document.getElementById("countdown");
+const drawBtn = document.getElementById("drawBtn");
+const skipBtn = document.getElementById("skipBtn");
+
+const drawControls = document.getElementById("drawControls");
+const undoBtn = document.getElementById("undoBtn");
+const clearBtn = document.getElementById("clearBtn");
+const giveupBtn = document.getElementById("giveupBtn");
+
+// Toggle state for box: "messages" or "players"
+let boxState = "messages";
+
+// Store messages and players received from server
+let messages = [];
+let players = [];
+
+// --- Handle Join ---
+joinBtn.addEventListener("click", () => {
+  nickname = nicknameInput.value.trim();
+  if (nickname !== "") {
+    socket.emit("join", nickname);
+    nicknameModal.classList.add("hidden");
+    gameContainer.classList.remove("hidden");
+  }
+});
+
+// --- Dynamic Resizing ---
+function resizeLayout() {
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+  // Canvas: a square sized to use about 60% of the viewport height or full width
+  const canvasSize = Math.min(vw, vh * 0.6);
+  drawingCanvas.width = canvasSize;
+  drawingCanvas.height = canvasSize;
+  document.getElementById("canvasContainer").style.height = canvasSize + "px";
+  // Box container fills the remaining space
+  document.getElementById("boxContainer").style.height = (vh - canvasSize) + "px";
+}
+window.addEventListener("resize", resizeLayout);
+resizeLayout();
+
+// --- Touch Drawing (for mobile) ---
+function getTouchPos(canvas, touchEvent) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: touchEvent.touches[0].clientX - rect.left,
+    y: touchEvent.touches[0].clientY - rect.top
   };
-  let nickname = '';
+}
 
-  // Adjust canvas to be square based on top container's width.
-  function resizeCanvas() {
-    const topContainer = document.getElementById('topContainer');
-    const width = topContainer.clientWidth;
-    drawingCanvas.width = width;
-    drawingCanvas.height = width;
-  }
+drawingCanvas.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  drawing = true;
+  const pos = getTouchPos(drawingCanvas, e);
+  lastPos = pos;
+  currentPath = [pos];
+});
 
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+drawingCanvas.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+  if (!drawing) return;
+  const pos = getTouchPos(drawingCanvas, e);
+  currentPath.push(pos);
+  drawSmoothLine(lastPos, pos);
+  lastPos = pos;
+  // Send drawing data in real time
+  socket.emit("drawing", { pos, brushColor, brushThickness });
+});
 
-  // Handle dynamic layout when keyboard appears.
-  function adjustLayout() {
-    const availableHeight = window.innerHeight;
-    const topContainer = document.getElementById('topContainer');
-    const bottomContainer = document.getElementById('bottomContainer');
+drawingCanvas.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  drawing = false;
+  paths.push({ path: currentPath, brushColor, brushThickness });
+});
 
-    // Ensure canvas (in topContainer) remains square.
-    const canvasWidth = topContainer.clientWidth;
-    topContainer.style.height = canvasWidth + 'px';
+// Draw using a quadratic curve for smoother lines
+function drawSmoothLine(start, end) {
+  ctx.strokeStyle = brushColor;
+  ctx.lineWidth = brushThickness;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
+  ctx.quadraticCurveTo(start.x, start.y, midX, midY);
+  ctx.stroke();
+}
 
-    // Bottom container takes up the rest of the space.
-    bottomContainer.style.height = (availableHeight - canvasWidth) + 'px';
-  }
-
-  window.addEventListener('resize', adjustLayout);
-  adjustLayout();
-
-  // Nickname join handler.
-  joinBtn.addEventListener('click', () => {
-    const name = nicknameInput.value.trim();
-    if (name) {
-      nickname = name;
-      socket.emit('join', nickname);
-      nicknameModal.style.display = 'none';
-    }
+// --- Brush & Color Selection ---
+brushButtons.forEach(button => {
+  button.addEventListener("click", () => {
+    brushThickness = parseInt(button.getAttribute("data-thickness"));
   });
-
-  // Toggle between message box and player box.
-  toggleBtn.addEventListener('click', () => {
-    if (messageBox.classList.contains('active')) {
-      messageBox.classList.remove('active');
-      playerBox.classList.add('active');
-      toggleBtn.textContent = 'Messages';
-    } else {
-      playerBox.classList.remove('active');
-      messageBox.classList.add('active');
-      toggleBtn.textContent = 'Players';
-    }
+});
+colorButtons.forEach(button => {
+  button.addEventListener("click", () => {
+    brushColor = button.getAttribute("data-color");
   });
+});
 
-  // Chat message submission.
-  chatForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const message = chatInput.value.trim();
-    if (message) {
-      const data = { nickname, message };
-      socket.emit('chatMessage', data);
-      appendMessage(data);
-      chatInput.value = '';
-    }
-  });
-
-  // Append a chat message to the messages box.
-  function appendMessage(data) {
-    const messageEl = document.createElement('div');
-    messageEl.textContent = `${data.nickname}: ${data.message}`;
-    messagesDiv.appendChild(messageEl);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+// --- Messaging and Player List Toggle ---
+toggleBoxBtn.addEventListener("click", () => {
+  if (boxState === "messages") {
+    boxState = "players";
+    toggleBoxBtn.textContent = "Players";
+  } else {
+    boxState = "messages";
+    toggleBoxBtn.textContent = "Messages";
   }
+  renderBoxContent();
+});
 
-  // Update player list when received from the server.
-  socket.on('playerList', (players) => {
-    playersDiv.innerHTML = '';
-    players.forEach(player => {
-      const playerEl = document.createElement('div');
-      playerEl.textContent = player.nickname;
-      playersDiv.appendChild(playerEl);
+// Send message on button click
+sendMsgBtn.addEventListener("click", () => {
+  const msg = messageInput.value.trim();
+  if (msg !== "") {
+    socket.emit("message", msg);
+    messageInput.value = "";
+  }
+});
+
+// Render messages or players in the box
+function renderBoxContent() {
+  boxContent.innerHTML = "";
+  if (boxState === "messages") {
+    messages.forEach(m => {
+      const div = document.createElement("div");
+      div.className = "message";
+      div.textContent = `${m.nickname}: ${m.text}`;
+      boxContent.appendChild(div);
     });
-  });
+  } else {
+    players.forEach(p => {
+      const div = document.createElement("div");
+      div.className = "player";
+      div.textContent = p.nickname;
+      boxContent.appendChild(div);
+    });
+  }
+}
 
-  // Receive and display chat messages from server.
-  socket.on('chatMessage', (data) => {
-    appendMessage(data);
-  });
+// --- Socket.IO Event Handlers ---
+socket.on("init", (data) => {
+  messages = data.messages || [];
+  players = data.players || [];
+  renderBoxContent();
+  // Draw any previous drawing data (simple rendering for new joiners)
+  if (data.drawingData && data.drawingData.length > 0) {
+    data.drawingData.forEach(d => {
+      ctx.fillStyle = d.brushColor;
+      ctx.beginPath();
+      ctx.arc(d.pos.x, d.pos.y, d.brushThickness / 2, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  }
+});
 
-  // Draw a line on the canvas.
-  function drawLine(x0, y0, x1, y1, color, thickness, emit) {
+socket.on("message", (msg) => {
+  messages.push(msg);
+  if (messages.length > 15) messages.shift();
+  renderBoxContent();
+});
+
+socket.on("playerList", (list) => {
+  players = list;
+  renderBoxContent();
+});
+
+socket.on("drawing", (data) => {
+  ctx.strokeStyle = data.brushColor;
+  ctx.lineWidth = data.brushThickness;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  // Simple representation: draw a small circle at the point received
+  ctx.arc(data.pos.x, data.pos.y, data.brushThickness / 2, 0, 2 * Math.PI);
+  ctx.fillStyle = data.brushColor;
+  ctx.fill();
+});
+
+socket.on("clearCanvas", () => {
+  clearLocalCanvas();
+});
+
+socket.on("undo", () => {
+  paths.pop();
+  redrawPaths();
+});
+
+socket.on("redraw", (drawingData) => {
+  clearLocalCanvas();
+  drawingData.forEach(d => {
+    ctx.strokeStyle = d.brushColor;
+    ctx.lineWidth = d.brushThickness;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = thickness;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    ctx.closePath();
-
-    if (!emit) return;
-    const w = drawingCanvas.width;
-    const h = drawingCanvas.height;
-    socket.emit('drawing', {
-      x0: x0 / w,
-      y0: y0 / h,
-      x1: x1 / w,
-      y1: y1 / h,
-      color: color,
-      thickness: thickness
-    });
-  }
-
-  // Handle mouse/touch events for drawing.
-  let lastX = 0;
-  let lastY = 0;
-
-  function onMouseDown(e) {
-    drawing = true;
-    const rect = drawingCanvas.getBoundingClientRect();
-    lastX = (e.clientX || e.touches[0].clientX) - rect.left;
-    lastY = (e.clientY || e.touches[0].clientY) - rect.top;
-  }
-
-  function onMouseMove(e) {
-    if (!drawing) return;
-    const rect = drawingCanvas.getBoundingClientRect();
-    const currentX = (e.clientX || e.touches[0].clientX) - rect.left;
-    const currentY = (e.clientY || e.touches[0].clientY) - rect.top;
-    drawLine(lastX, lastY, currentX, currentY, current.color, current.thickness, true);
-    lastX = currentX;
-    lastY = currentY;
-  }
-
-  function onMouseUp() {
-    if (!drawing) return;
-    drawing = false;
-  }
-
-  drawingCanvas.addEventListener('mousedown', onMouseDown);
-  drawingCanvas.addEventListener('mousemove', onMouseMove);
-  drawingCanvas.addEventListener('mouseup', onMouseUp);
-  drawingCanvas.addEventListener('mouseout', onMouseUp);
-
-  // Touch events for mobile.
-  drawingCanvas.addEventListener('touchstart', onMouseDown);
-  drawingCanvas.addEventListener('touchmove', onMouseMove);
-  drawingCanvas.addEventListener('touchend', onMouseUp);
-  drawingCanvas.addEventListener('touchcancel', onMouseUp);
-
-  // Listen for drawing data from other players.
-  socket.on('drawing', (data) => {
-    const w = drawingCanvas.width;
-    const h = drawingCanvas.height;
-    drawLine(data.x0 * w, data.y0 * h, data.x1 * w, data.y1 * h, data.color, data.thickness);
+    ctx.arc(d.pos.x, d.pos.y, d.brushThickness / 2, 0, 2 * Math.PI);
+    ctx.fillStyle = d.brushColor;
+    ctx.fill();
   });
+});
 
-  // Tool selection for brush thickness.
-  thicknessButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      current.thickness = parseInt(button.getAttribute('data-thickness'));
-      thicknessButtons.forEach(btn => btn.classList.remove('selected'));
-      button.classList.add('selected');
-    });
-  });
-  // Set default thickness.
-  thicknessButtons[0].classList.add('selected');
+// Helper functions for canvas
+function clearLocalCanvas() {
+  ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+  paths = [];
+}
 
-  // Tool selection for color.
-  colorButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      current.color = button.getAttribute('data-color');
-      colorButtons.forEach(btn => btn.classList.remove('selected'));
-      button.classList.add('selected');
-    });
+function redrawPaths() {
+  clearLocalCanvas();
+  paths.forEach(stroke => {
+    for (let i = 1; i < stroke.path.length; i++) {
+      drawSmoothLine(stroke.path[i - 1], stroke.path[i]);
+    }
   });
-  // Set default color.
-  colorButtons[0].classList.add('selected');
+}
+
+// --- Turn & Drawing Controls ---
+socket.on("turn", (player) => {
+  currentPlayerSpan.textContent = "Turn: " + player.nickname;
+  // If it’s your turn, show drawing controls; otherwise hide them.
+  if (player.id === socket.id) {
+    drawControls.classList.remove("hidden");
+  } else {
+    drawControls.classList.add("hidden");
+  }
+});
+
+socket.on("countdown", (value) => {
+  countdownSpan.textContent = value;
+});
+
+// Turn button actions
+drawBtn.addEventListener("click", () => {
+  socket.emit("turnAction", "draw");
+});
+skipBtn.addEventListener("click", () => {
+  socket.emit("turnAction", "skip");
+});
+
+// Drawing control buttons
+undoBtn.addEventListener("click", () => {
+  socket.emit("undo");
+});
+clearBtn.addEventListener("click", () => {
+  socket.emit("clearCanvas");
+});
+giveupBtn.addEventListener("click", () => {
+  socket.emit("turnAction", "giveup");
 });

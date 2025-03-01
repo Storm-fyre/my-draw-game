@@ -1,72 +1,87 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>My Draw Game</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>my-draw-game</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Nickname modal -->
+  <!-- Nickname Modal -->
   <div id="nicknameModal" class="modal">
     <div class="modal-content">
-      <h2>Enter your nickname</h2>
-      <input type="text" id="nicknameInput" placeholder="Nickname" />
+      <h2>Enter Nickname</h2>
+      <input type="text" id="nicknameInput" placeholder="Nickname">
       <button id="joinBtn">Join Game</button>
     </div>
   </div>
 
-  <!-- Main game container -->
-  <div id="gameContainer">
-    <!-- Top container for canvas and drawing tools -->
-    <div id="topContainer">
+  <!-- Main Game Container -->
+  <div id="gameContainer" class="hidden">
+    <!-- Canvas Container -->
+    <div id="canvasContainer">
       <canvas id="drawingCanvas"></canvas>
+      <!-- Tools overlay on canvas -->
       <div id="tools">
-        <div id="thicknessOptions">
-          <button class="thickness" data-thickness="2">2px</button>
-          <button class="thickness" data-thickness="4">4px</button>
-          <button class="thickness" data-thickness="6">6px</button>
-          <button class="thickness" data-thickness="8">8px</button>
-          <button class="thickness" data-thickness="10">10px</button>
+        <!-- Brush thickness options -->
+        <div id="brushThickness">
+          <button data-thickness="2">2px</button>
+          <button data-thickness="4">4px</button>
+          <button data-thickness="6">6px</button>
+          <button data-thickness="8">8px</button>
+          <button data-thickness="10">10px</button>
         </div>
+        <!-- Color options (18 colours) -->
         <div id="colorOptions">
-          <!-- 18 basic colors -->
-          <button class="color" data-color="#000000" style="background-color:#000000;"></button>
-          <button class="color" data-color="#FF0000" style="background-color:#FF0000;"></button>
-          <button class="color" data-color="#00FF00" style="background-color:#00FF00;"></button>
-          <button class="color" data-color="#0000FF" style="background-color:#0000FF;"></button>
-          <button class="color" data-color="#FFFF00" style="background-color:#FFFF00;"></button>
-          <button class="color" data-color="#FF00FF" style="background-color:#FF00FF;"></button>
-          <button class="color" data-color="#00FFFF" style="background-color:#00FFFF;"></button>
-          <button class="color" data-color="#800000" style="background-color:#800000;"></button>
-          <button class="color" data-color="#008000" style="background-color:#008000;"></button>
-          <button class="color" data-color="#000080" style="background-color:#000080;"></button>
-          <button class="color" data-color="#808000" style="background-color:#808000;"></button>
-          <button class="color" data-color="#800080" style="background-color:#800080;"></button>
-          <button class="color" data-color="#008080" style="background-color:#008080;"></button>
-          <button class="color" data-color="#C0C0C0" style="background-color:#C0C0C0;"></button>
-          <button class="color" data-color="#808080" style="background-color:#808080;"></button>
-          <button class="color" data-color="#FFA500" style="background-color:#FFA500;"></button>
-          <button class="color" data-color="#A52A2A" style="background-color:#A52A2A;"></button>
-          <button class="color" data-color="#FFC0CB" style="background-color:#FFC0CB;"></button>
+          <button data-color="#000000" style="background:#000000;"></button>
+          <button data-color="#FF0000" style="background:#FF0000;"></button>
+          <button data-color="#00FF00" style="background:#00FF00;"></button>
+          <button data-color="#0000FF" style="background:#0000FF;"></button>
+          <button data-color="#FFFF00" style="background:#FFFF00;"></button>
+          <button data-color="#FF00FF" style="background:#FF00FF;"></button>
+          <button data-color="#00FFFF" style="background:#00FFFF;"></button>
+          <button data-color="#FFFFFF" style="background:#FFFFFF;"></button>
+          <button data-color="#800000" style="background:#800000;"></button>
+          <button data-color="#808000" style="background:#808000;"></button>
+          <button data-color="#008000" style="background:#008000;"></button>
+          <button data-color="#800080" style="background:#800080;"></button>
+          <button data-color="#008080" style="background:#008080;"></button>
+          <button data-color="#000080" style="background:#000080;"></button>
+          <button data-color="#FFA500" style="background:#FFA500;"></button>
+          <button data-color="#A52A2A" style="background:#A52A2A;"></button>
+          <button data-color="#FFC0CB" style="background:#FFC0CB;"></button>
+          <button data-color="#808080" style="background:#808080;"></button>
         </div>
+      </div>
+      <!-- Turn overlay (shows current turn and countdown with Draw/Skip options) -->
+      <div id="turnOverlay">
+        <div id="turnInfo">
+          <span id="currentPlayer"></span>
+          <span id="countdown"></span>
+        </div>
+        <div id="turnButtons">
+          <button id="drawBtn">Draw</button>
+          <button id="skipBtn">Skip</button>
+        </div>
+      </div>
+      <!-- Drawing controls for the drawing player -->
+      <div id="drawControls" class="hidden">
+        <button id="undoBtn">Undo</button>
+        <button id="clearBtn">Clear</button>
+        <button id="giveupBtn">Give Up</button>
       </div>
     </div>
-
-    <!-- Bottom container for message/player box -->
-    <div id="bottomContainer">
-      <div id="toggleContainer">
-        <button id="toggleBtn">Players</button>
+    <!-- Box Container for messages/players -->
+    <div id="boxContainer">
+      <div id="boxHeader">
+        <button id="toggleBox">Messages</button>
       </div>
-      <div id="messageBox" class="active">
-        <div id="messages"></div>
-        <form id="chatForm">
-          <input type="text" id="chatInput" placeholder="Type a message..." />
-          <button type="submit">Send</button>
-        </form>
+      <div id="boxContent">
+        <!-- Messages or player list will be rendered here -->
       </div>
-      <div id="playerBox">
-        <div id="players"></div>
+      <div id="messageInputContainer">
+        <input type="text" id="messageInput" placeholder="Type a message...">
+        <button id="sendMsg">Send</button>
       </div>
     </div>
   </div>

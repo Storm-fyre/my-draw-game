@@ -1,30 +1,33 @@
-/* Reset defaults */
+/* Reset & Basic Styles */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body, html {
-  width: 100%;
-  height: 100%;
+body {
+  background: #e0f7e0; /* light green background */
   font-family: Arial, sans-serif;
+  overflow: hidden;
 }
 
-/* Nickname modal */
+.hidden {
+  display: none;
+}
+
+/* Modal for nickname */
 .modal {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
+  right:0;
+  bottom:0;
+  background: rgba(0,0,0,0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 10;
 }
-
 .modal-content {
   background: #fff;
   padding: 20px;
@@ -32,105 +35,131 @@ body, html {
   text-align: center;
 }
 
-/* Game container */
+/* Main game container */
 #gameContainer {
   width: 100%;
-  height: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* Top container for canvas */
-#topContainer {
+/* Canvas container */
+#canvasContainer {
   position: relative;
   width: 100%;
-  /* Height will be set dynamically to ensure the canvas is square */
 }
-
-/* Canvas styling */
 #drawingCanvas {
   display: block;
   background: #fff;
-  border: 1px solid #ccc;
-  margin: auto;
 }
 
-/* Tools area at the bottom of the canvas */
+/* Tools overlay */
 #tools {
   position: absolute;
   bottom: 0;
+  left: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(0, 128, 0, 0.3);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 5px 0;
 }
-
-#thicknessOptions, #colorOptions {
-  margin: 5px 0;
-}
-
-.thickness, .color {
-  margin: 0 3px;
+#brushThickness, #colorOptions {
+  display: flex;
+  justify-content: center;
   padding: 5px;
+}
+#brushThickness button, #colorOptions button {
+  margin: 0 5px;
   border: none;
+  padding: 5px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#colorOptions button {
+  width: 24px;
+  height: 24px;
+}
+
+/* Turn overlay */
+#turnOverlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,128,0,0.5);
+  color: #fff;
+  padding: 10px;
+  border-radius: 5px;
+  text-align: center;
+}
+#turnOverlay #turnButtons {
+  margin-top: 10px;
+}
+#turnOverlay button {
+  margin: 0 5px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 3px;
   cursor: pointer;
 }
 
-.color {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+/* Drawing controls */
+#drawControls {
+  position: absolute;
+  bottom: 50px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+}
+#drawControls button {
+  margin: 5px 0;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 3px;
+  background: #388e3c;
+  color: #fff;
+  cursor: pointer;
 }
 
-/* Bottom container for message and player boxes */
-#bottomContainer {
+/* Box container for messages and players */
+#boxContainer {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #ccc;
+  background: #c8e6c9;
 }
-
-/* Toggle button container */
-#toggleContainer {
-  text-align: right;
-  padding: 5px;
-  border-bottom: 1px solid #ccc;
+#boxHeader {
+  background: #388e3c;
+  color: #fff;
+  padding: 10px;
+  text-align: center;
 }
-
-/* Message and player box styles */
-#messageBox, #playerBox {
+#boxHeader button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+}
+#boxContent {
   flex: 1;
   overflow-y: auto;
   padding: 10px;
-  display: none;
 }
-
-#messageBox.active, #playerBox.active {
-  display: block;
-}
-
-/* Chat form styling */
-#chatForm {
+#messageInputContainer {
   display: flex;
-  margin-top: 10px;
+  border-top: 1px solid #388e3c;
 }
-
-#chatInput {
+#messageInputContainer input {
   flex: 1;
-  padding: 5px;
+  padding: 10px;
+  border: none;
   font-size: 16px;
 }
-
-#chatForm button {
-  padding: 5px 10px;
+#messageInputContainer button {
+  padding: 10px;
+  border: none;
+  background: #388e3c;
+  color: #fff;
   font-size: 16px;
   cursor: pointer;
-}
-
-/* Messages container */
-#messages {
-  max-height: 100%;
-  overflow-y: auto;
 }
