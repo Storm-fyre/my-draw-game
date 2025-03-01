@@ -12,7 +12,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
-// Serve lobby info so the client can display available lobbies.
 app.get('/lobbies', (req, res) => {
   res.json(lobbyInfo);
 });
@@ -88,19 +87,17 @@ function startNextTurn(lobbyName) {
   const state = activeLobbies[lobbyName];
   if (!state) return;
   
-  // Clear any existing turn timer
   if (state.turnTimer) {
     clearInterval(state.turnTimer);
     state.turnTimer = null;
   }
-  // Clear the canvas state for the lobby
+  // Clear canvas state for the lobby
   io.to(lobbyName).emit('clearCanvas');
   state.canvasStrokes = [];
   state.currentObject = null;
   state.guessedCorrectly = {};
   
-  // Determine the next drawer.
-  // If there is only one player, the same player continues.
+  // Rotate turn based on arrival order (playerOrder array)
   if (state.playerOrder.length === 0) {
     state.currentDrawer = null;
     return;
@@ -116,11 +113,18 @@ function startNextTurn(lobbyName) {
     }
   }
   
-  // Broadcast turn start event to lobby
-  io.to(lobbyName).emit('turnStarted', { currentDrawer: state.currentDrawer, duration: DECISION_DURATION });
+  let currentDrawerRank = state.playerOrder.indexOf(state.currentDrawer) + 1;
+  let currentDrawerName = state.players[state.currentDrawer].nickname;
+  // Broadcast turn-start along with the drawer's rank and name
+  io.to(lobbyName).emit('turnStarted', { 
+    currentDrawer: state.currentDrawer, 
+    duration: DECISION_DURATION,
+    currentDrawerRank,
+    currentDrawerName
+  });
   
-  // Send object selection options only to the new drawing player
   const options = getRandomObjects(3);
+  // Send object selection options privately to the drawer
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
   let timeLeft = DECISION_DURATION;
@@ -141,9 +145,9 @@ io.on('connection', (socket) => {
   
   // --- Lobby joining ---
   socket.on('joinLobby', (data) => {
-    // data: { lobbyName, passcode }
     const lobbyEntry = lobbyInfo.find(l => l.name === data.lobbyName);
-    if (!lobbyEntry || lobbyEntry.passcode !== data.passcode) {
+    // If passcode exists and does not match, reject; if passcode is blank, allow directly.
+    if (!lobbyEntry || (lobbyEntry.passcode && lobbyEntry.passcode !== data.passcode)) {
       socket.emit('lobbyError', { message: 'Invalid lobby or passcode.' });
       return;
     }
@@ -162,16 +166,29 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // For a new joiner, send an empty chat and the current canvas strokes so they see the in-progress drawing.
+    // For new joiners, send empty chat history and current canvas strokes so they see in-progress drawing.
     socket.emit('init', {
-      players: Object.values(state.players),
+      players: state.playerOrder.map(id => {
+        let player = state.players[id];
+        return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+      }),
       chatMessages: [],
       canvasStrokes: state.canvasStrokes
     });
-    io.to(lobbyName).emit('updatePlayers', Object.values(state.players));
+    io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
+      let player = state.players[id];
+      return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+    }));
     if (!state.currentDrawer) {
       state.currentDrawer = socket.id;
-      io.to(lobbyName).emit('turnStarted', { currentDrawer: state.currentDrawer, duration: DECISION_DURATION });
+      let currentDrawerRank = state.playerOrder.indexOf(state.currentDrawer) + 1;
+      let currentDrawerName = state.players[state.currentDrawer].nickname;
+      io.to(lobbyName).emit('turnStarted', { 
+        currentDrawer: state.currentDrawer, 
+        duration: DECISION_DURATION,
+        currentDrawerRank,
+        currentDrawerName
+      });
       const options = getRandomObjects(3);
       io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
       let timeLeft = DECISION_DURATION;
@@ -201,7 +218,7 @@ io.on('connection', (socket) => {
       state.currentObject = objectChosen;
       state.guessedCorrectly = {};
       state.currentDrawTimeLeft = DRAW_DURATION;
-      // Broadcast the chosen object for dash hint display on non-drawing clients.
+      // Broadcast the chosen object for dash hint display (words not visible to the drawer)
       io.to(lobbyName).emit('objectChosenBroadcast', { object: state.currentObject });
       io.to(lobbyName).emit('drawPhaseStarted', { currentDrawer: state.currentDrawer, duration: DRAW_DURATION });
       let timeLeft = DRAW_DURATION;
@@ -236,8 +253,11 @@ io.on('connection', (socket) => {
           const nickname = state.players[socket.id].nickname;
           const correctMsg = `${nickname} guessed correctly and earned ${points} points!`;
           io.to(lobbyName).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
-          io.to(lobbyName).emit('updatePlayers', Object.values(state.players));
-          // If all non-drawing players have guessed, end the turn immediately.
+          io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
+            let player = state.players[id];
+            return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+          }));
+          // If all non-drawing players have guessed, end the turn.
           if (Object.keys(state.guessedCorrectly).length >= (Object.keys(state.players).length - 1)) {
             if (state.turnTimer) {
               clearInterval(state.turnTimer);
@@ -272,7 +292,6 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    // Add the complete stroke to the lobby's canvas state
     state.canvasStrokes.push(data);
     socket.to(lobbyName).emit('strokeComplete', data);
   });
@@ -317,7 +336,10 @@ io.on('connection', (socket) => {
       const state = activeLobbies[lobbyName];
       delete state.players[socket.id];
       state.playerOrder = state.playerOrder.filter(id => id !== socket.id);
-      io.to(lobbyName).emit('updatePlayers', Object.values(state.players));
+      io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
+        let player = state.players[id];
+        return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+      }));
       if (socket.id === state.currentDrawer) {
         startNextTurn(lobbyName);
       }

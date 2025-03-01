@@ -41,13 +41,19 @@ joinBtn.addEventListener('click', () => {
         data.forEach(lobby => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
-          btn.addEventListener('click', () => {
-            // Show passcode input for this lobby
-            lobbyButtonsDiv.style.display = 'none';
-            lobbyPasscodeContainer.style.display = 'block';
-            selectedLobbyNameElem.textContent = lobby.name;
-            selectedLobbyNameElem.setAttribute('data-lobby', lobby.name);
-          });
+          if (lobby.passcode === "") {
+            // Directly join if no passcode is required.
+            btn.addEventListener('click', () => {
+              socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
+            });
+          } else {
+            btn.addEventListener('click', () => {
+              lobbyButtonsDiv.style.display = 'none';
+              lobbyPasscodeContainer.style.display = 'block';
+              selectedLobbyNameElem.textContent = lobby.name;
+              selectedLobbyNameElem.setAttribute('data-lobby', lobby.name);
+            });
+          }
           lobbyButtonsDiv.appendChild(btn);
         });
         lobbyModal.style.display = 'flex';
@@ -66,13 +72,11 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
-  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
-  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -154,131 +158,78 @@ function updatePlayerList(playersArr) {
   playerBox.innerHTML = "";
   playersArr.forEach(p => {
     const pElem = document.createElement('p');
-    pElem.textContent = `${p.nickname} (${p.score})`;
+    pElem.textContent = `${p.rank}. ${p.nickname} (${p.score})`;
     playerBox.appendChild(pElem);
   });
 }
 
 // --- Dash hint update function ---
-// This function computes the dash hint based on the current object and remaining drawing time.
 // Reveal schedule:
-// Single word: at time<=50: reveal letter1, at <=30: reveal letter2, at <=10: reveal letter3.
-// Two words: at <=50: reveal first letter of word1, at <=30: reveal first letter of word2, at <=10: reveal second letter of word1.
-// Three words: at <=50: reveal first letter of word1, at <=30: reveal first letter of word2, at <=10: reveal first letter of word3.
+// Single word: ≤50 sec: reveal letter1, ≤30: letter2, ≤10: letter3.
+// Two words: ≤50: first letter of word1, ≤30: first letter of word2, ≤10: second letter of word1.
+// Three words: ≤50: first letter of word1, ≤30: first letter of word2, ≤10: first letter of word3.
 function updateDashHint() {
-  // Only for non-drawing players and when an object has been chosen.
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
     return;
   }
   let words = currentObjectStr.split(' ');
   let hintWords = [];
-  
-  // Helper: generate dashes for a word
-  function dashes(n) {
-    return "_".repeat(n).split("").join(" ");
-  }
-  
   if (words.length === 1) {
     let word = words[0];
     let revealed = "";
-    if (currentDrawTime <= 50) {
-      revealed = word.charAt(0);
-    }
-    if (currentDrawTime <= 30 && word.length > 1) {
-      revealed += word.charAt(1);
-    }
-    if (currentDrawTime <= 10 && word.length > 2) {
-      revealed += word.charAt(2);
-    }
+    if (currentDrawTime <= 50) { revealed = word.charAt(0); }
+    if (currentDrawTime <= 30 && word.length > 1) { revealed += word.charAt(1); }
+    if (currentDrawTime <= 10 && word.length > 2) { revealed += word.charAt(2); }
     let display = "";
     for (let i = 0; i < word.length; i++) {
-      if (i < revealed.length) {
-        display += word.charAt(i) + " ";
-      } else {
-        display += "_ ";
-      }
+      display += (i < revealed.length ? word.charAt(i) : "_") + " ";
     }
     hintWords.push(display.trim());
   } else if (words.length === 2) {
-    let word1 = words[0], word2 = words[1];
+    let [word1, word2] = words;
     let r1 = "", r2 = "";
-    if (currentDrawTime <= 50) {
-      r1 = word1.charAt(0);
-    }
-    if (currentDrawTime <= 30) {
-      r2 = word2.charAt(0);
-    }
-    if (currentDrawTime <= 10 && word1.length > 1) {
-      r1 += word1.charAt(1);
-    }
+    if (currentDrawTime <= 50) { r1 = word1.charAt(0); }
+    if (currentDrawTime <= 30) { r2 = word2.charAt(0); }
+    if (currentDrawTime <= 10 && word1.length > 1) { r1 += word1.charAt(1); }
     let disp1 = "";
     for (let i = 0; i < word1.length; i++) {
-      if (i < r1.length) {
-        disp1 += word1.charAt(i) + " ";
-      } else {
-        disp1 += "_ ";
-      }
+      disp1 += (i < r1.length ? word1.charAt(i) : "_") + " ";
     }
     let disp2 = "";
     for (let i = 0; i < word2.length; i++) {
-      if (i < r2.length) {
-        disp2 += word2.charAt(i) + " ";
-      } else {
-        disp2 += "_ ";
-      }
+      disp2 += (i < r2.length ? word2.charAt(i) : "_") + " ";
     }
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   } else if (words.length === 3) {
-    let word1 = words[0], word2 = words[1], word3 = words[2];
+    let [word1, word2, word3] = words;
     let r1 = "", r2 = "", r3 = "";
-    if (currentDrawTime <= 50) {
-      r1 = word1.charAt(0);
-    }
-    if (currentDrawTime <= 30) {
-      r2 = word2.charAt(0);
-    }
-    if (currentDrawTime <= 10) {
-      r3 = word3.charAt(0);
-    }
+    if (currentDrawTime <= 50) { r1 = word1.charAt(0); }
+    if (currentDrawTime <= 30) { r2 = word2.charAt(0); }
+    if (currentDrawTime <= 10) { r3 = word3.charAt(0); }
     let disp1 = "";
     for (let i = 0; i < word1.length; i++) {
-      if (i < r1.length) {
-        disp1 += word1.charAt(i) + " ";
-      } else {
-        disp1 += "_ ";
-      }
+      disp1 += (i < r1.length ? word1.charAt(i) : "_") + " ";
     }
     let disp2 = "";
     for (let i = 0; i < word2.length; i++) {
-      if (i < r2.length) {
-        disp2 += word2.charAt(i) + " ";
-      } else {
-        disp2 += "_ ";
-      }
+      disp2 += (i < r2.length ? word2.charAt(i) : "_") + " ";
     }
     let disp3 = "";
     for (let i = 0; i < word3.length; i++) {
-      if (i < r3.length) {
-        disp3 += word3.charAt(i) + " ";
-      } else {
-        disp3 += "_ ";
-      }
+      disp3 += (i < r3.length ? word3.charAt(i) : "_") + " ";
     }
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
     hintWords.push(disp3.trim());
   }
-  // Join words with a 3-space gap.
   dashHintDiv.textContent = hintWords.join("   ");
 }
 
 // --- Socket events ---
 socket.on('init', (data) => {
-  // For new joiners, use an empty chat history.
   updatePlayerList(data.players);
-  // Load current canvas strokes so the new joiner sees the in-progress drawing.
   if(data.canvasStrokes) {
     paths = data.canvasStrokes;
     redrawStrokes();
@@ -294,7 +245,6 @@ socket.on('updatePlayers', (playersArr) => {
 });
 
 socket.on('drawing', (data) => {
-  // For non-drawing players, update the current remote stroke.
   if (!isMyTurn) {
     currentRemoteStroke = data;
     redrawStrokes();
@@ -302,7 +252,6 @@ socket.on('drawing', (data) => {
 });
 
 socket.on('strokeComplete', (data) => {
-  // When a complete stroke is received, add it permanently.
   if (!isMyTurn) {
     paths.push(data);
     currentRemoteStroke = null;
@@ -328,14 +277,19 @@ const countdownDisplay = document.getElementById('countdownDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
 socket.on('turnStarted', (data) => {
+  // data contains currentDrawer, duration, currentDrawerRank, currentDrawerName
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
+    // For the drawing player, turnPrompt will eventually show object selection.
+    turnPrompt.style.display = 'flex';
   } else {
     isMyTurn = false;
+    // For non-drawing players, show a message that indicates which player is choosing.
+    turnPrompt.style.display = 'flex';
+    promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
+    turnOptionsDiv.innerHTML = "";
   }
-  turnPrompt.style.display = (data.currentDrawer === socket.id) ? 'flex' : 'none';
-  // Show draw controls only for the drawing player.
   drawControlsDiv.style.display = (data.currentDrawer === socket.id) ? 'block' : 'none';
 });
 
@@ -369,14 +323,13 @@ socket.on('objectSelection', (data) => {
   }
 });
 
-// When the drawing player chooses an object, broadcast it so non-drawing players can show the dash hint.
+// When the drawing player chooses an object, broadcast it for dash hint (only non-drawing players see it)
 socket.on('objectChosenBroadcast', (data) => {
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
 });
 
-// Draw phase events
 socket.on('drawPhaseStarted', (data) => {
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
