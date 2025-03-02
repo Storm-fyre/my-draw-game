@@ -38,6 +38,7 @@ body, html {
 #canvasContainer {
   position: relative;
   background-color: #fff;
+  overflow: hidden;  /* Prevent the turn prompt from overflowing */
 }
 
 /* Dash hint above the canvas */
@@ -93,7 +94,7 @@ body, html {
   gap: 5px;
 }
 
-/* Turn prompt overlay */
+/* Turn prompt overlay (used for object selection in decision phase) */
 #turnPrompt {
   position: absolute;
   top: 0;
@@ -104,13 +105,7 @@ body, html {
   display: none;
   align-items: center;
   justify-content: center;
-}
-
-#turnPrompt #turnMessage {
-  background: rgba(255,255,255,0.9);
-  padding: 10px;
-  border-radius: 8px;
-  text-align: center;
+  z-index: 1; /* Ensure it stays below the box container */
 }
 
 /* Draw phase countdown display */
@@ -132,14 +127,18 @@ body, html {
   background-color: #c8e6c9; /* lighter green */
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 10; /* Bring this above canvas overlays */
 }
 
+/* Box header */
 #boxHeader {
   display: flex;
   justify-content: flex-end;
   padding: 5px;
 }
 
+/* Toggle button */
 #toggleBox {
   background-color: #4caf50;
   color: white;
@@ -149,6 +148,7 @@ body, html {
   cursor: pointer;
 }
 
+/* Box content */
 #boxContent {
   flex: 1;
   overflow-y: auto;
