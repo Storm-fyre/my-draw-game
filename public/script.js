@@ -169,7 +169,6 @@ function updatePlayerList(playersArr) {
 }
 
 // --- Dash hint update function ---
-// (Only handling 1-word and 2-word objects.)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -447,20 +446,36 @@ function undoLastStroke() {
 
 // --- Handle thickness and color changes ---
 const thicknessDropdownBtn = document.getElementById('thicknessDropdownBtn');
+const thicknessDropdownContent = document.getElementById('thicknessDropdownContent');
+thicknessDropdownBtn.addEventListener('click', () => {
+  // Toggle thickness dropdown
+  thicknessDropdownContent.classList.toggle('show');
+});
+
 const thicknessButtons = document.querySelectorAll('.thickness');
 thicknessButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentThickness = parseInt(btn.getAttribute('data-size'));
     thicknessDropdownBtn.textContent = `Thickness: ${currentThickness}px`;
+    thicknessDropdownContent.classList.remove('show');
   });
 });
 
+// Color dropdown
 const colorDropdownBtn = document.getElementById('colorDropdownBtn');
+const colorDropdownContent = document.getElementById('colorDropdownContent');
+colorDropdownBtn.style.backgroundColor = currentColor; // default
+colorDropdownBtn.addEventListener('click', () => {
+  // Toggle color dropdown
+  colorDropdownContent.classList.toggle('show');
+});
+
 const colorButtons = document.querySelectorAll('.color');
 colorButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentColor = btn.getAttribute('data-color');
-    colorDropdownBtn.style.background = currentColor;
+    colorDropdownBtn.style.backgroundColor = currentColor;
+    colorDropdownContent.classList.remove('show');
   });
 });
 
@@ -490,6 +505,18 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
     dashHintDiv.textContent = "";
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
+  }
+});
+
+// --- Close dropdown if clicked outside
+window.addEventListener('click', (e) => {
+  // If we clicked outside thickness dropdown
+  if (!e.target.matches('#thicknessDropdownBtn') && !thicknessDropdownContent.contains(e.target)) {
+    thicknessDropdownContent.classList.remove('show');
+  }
+  // If we clicked outside color dropdown
+  if (!e.target.matches('#colorDropdownBtn') && !colorDropdownContent.contains(e.target)) {
+    colorDropdownContent.classList.remove('show');
   }
 });
 
