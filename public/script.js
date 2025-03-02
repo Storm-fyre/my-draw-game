@@ -169,6 +169,7 @@ function updatePlayerList(playersArr) {
 }
 
 // --- Dash hint update function ---
+// (Only handling 1-word and 2-word objects.)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -444,39 +445,41 @@ function undoLastStroke() {
   redrawStrokes();
 }
 
-// --- Handle thickness and color changes ---
+// --- Handle thickness changes (still hover-based) ---
 const thicknessDropdownBtn = document.getElementById('thicknessDropdownBtn');
-const thicknessDropdownContent = document.getElementById('thicknessDropdownContent');
-thicknessDropdownBtn.addEventListener('click', () => {
-  // Toggle thickness dropdown
-  thicknessDropdownContent.classList.toggle('show');
-});
-
 const thicknessButtons = document.querySelectorAll('.thickness');
 thicknessButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentThickness = parseInt(btn.getAttribute('data-size'));
     thicknessDropdownBtn.textContent = `Thickness: ${currentThickness}px`;
-    thicknessDropdownContent.classList.remove('show');
   });
 });
 
-// Color dropdown
+// --- Handle color changes (click-based dropdown) ---
 const colorDropdownBtn = document.getElementById('colorDropdownBtn');
 const colorDropdownContent = document.getElementById('colorDropdownContent');
-colorDropdownBtn.style.backgroundColor = currentColor; // default
-colorDropdownBtn.addEventListener('click', () => {
-  // Toggle color dropdown
+const colorButtons = document.querySelectorAll('.color');
+
+// Toggle color dropdown on button click
+colorDropdownBtn.addEventListener('click', (e) => {
+  e.stopPropagation(); // so it doesn't immediately close if we click the button
   colorDropdownContent.classList.toggle('show');
 });
 
-const colorButtons = document.querySelectorAll('.color');
+// If user clicks a color, apply it and close the dropdown
 colorButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentColor = btn.getAttribute('data-color');
-    colorDropdownBtn.style.backgroundColor = currentColor;
+    colorDropdownBtn.style.background = currentColor;
     colorDropdownContent.classList.remove('show');
   });
+});
+
+// Close the dropdown if the user clicks anywhere outside it
+document.addEventListener('click', (e) => {
+  if (!colorDropdownContent.contains(e.target) && e.target !== colorDropdownBtn) {
+    colorDropdownContent.classList.remove('show');
+  }
 });
 
 // --- Draw control buttons ---
@@ -505,18 +508,6 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
     dashHintDiv.textContent = "";
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
-  }
-});
-
-// --- Close dropdown if clicked outside
-window.addEventListener('click', (e) => {
-  // If we clicked outside thickness dropdown
-  if (!e.target.matches('#thicknessDropdownBtn') && !thicknessDropdownContent.contains(e.target)) {
-    thicknessDropdownContent.classList.remove('show');
-  }
-  // If we clicked outside color dropdown
-  if (!e.target.matches('#colorDropdownBtn') && !colorDropdownContent.contains(e.target)) {
-    colorDropdownContent.classList.remove('show');
   }
 });
 

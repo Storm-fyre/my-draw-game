@@ -53,8 +53,9 @@
 
         <!-- Color dropdown -->
         <div id="brushColorDropdown" class="dropdown">
-          <!-- Circle button showing current color -->
-          <button id="colorDropdownBtn" class="dropbtn colorCircleBtn"></button>
+          <!-- Circle button showing the current color -->
+          <button id="colorDropdownBtn" class="circle-color-btn" style="background:#000000;"></button>
+          <!-- Dropdown color grid (hidden by default, toggled by script) -->
           <div id="colorDropdownContent" class="dropdown-content color-grid">
             <!-- 18 color buttons -->
             <button class="color" data-color="#000000" style="background:#000000;"></button>
@@ -94,9 +95,7 @@
       <div id="turnPrompt">
         <div id="turnMessage">
           <p id="promptText">Your turn! Choose an object:</p>
-          <div id="turnOptions">
-            <!-- Three buttons will be dynamically inserted here -->
-          </div>
+          <div id="turnOptions"></div>
           <div id="countdownDisplay">10</div>
         </div>
       </div>

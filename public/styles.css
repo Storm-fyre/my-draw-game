@@ -75,9 +75,6 @@ body, html {
   display: inline-block;
 }
 
-/* We no longer use hover to show the content, so remove .dropdown:hover .dropdown-content */
-
-/* The main button style */
 .dropbtn {
   background-color: #fff;
   color: #000;
@@ -88,17 +85,16 @@ body, html {
   font-size: 14px;
 }
 
-/* For the color circle button specifically */
-.colorCircleBtn {
-  width: 36px;
-  height: 36px;
+/* Circle color button */
+.circle-color-btn {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 2px solid #ccc;
   padding: 0;
-  background-color: #000; /* default color */
 }
 
-/* The dropdown content panel */
+/* The default hidden dropdown content */
 .dropdown-content {
   display: none;
   position: absolute;
@@ -107,13 +103,13 @@ body, html {
   border-radius: 4px;
   min-width: 80px;
   box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
-  z-index: 9999; /* ensure it stays above chat/player box */
+  z-index: 9999; /* on top of everything */
   padding: 5px;
 }
 
-/* A utility class to show the content when toggled */
-.show {
-  display: block !important;
+/* Show the dropdown on .show class */
+.dropdown-content.show {
+  display: block;
 }
 
 /* Color grid for color dropdown */
@@ -127,7 +123,7 @@ body, html {
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 12px;
+  border-radius: 50%;
   cursor: pointer;
 }
 
