@@ -69,14 +69,16 @@
           <button class="color" data-color="#A52A2A" style="background:#A52A2A;"></button>
         </div>
       </div>
-      <!-- Drawing control buttons for the active drawer -->
-      <div id="drawControls">
-        <button id="undoBtn">Undo</button>
-        <button id="clearBtn">Clear</button>
-        <button id="giveUpBtn">Give Up</button>
+      <!-- Status bar: contains drawing controls, chosen object, and countdown timer -->
+      <div id="statusBar">
+        <div id="drawControls">
+          <button id="undoBtn">Undo</button>
+          <button id="clearBtn">Clear</button>
+          <button id="giveUpBtn">Give Up</button>
+        </div>
+        <div id="objectDisplay"></div>
+        <div id="drawCountdown" class="drawCountdown"></div>
       </div>
-      <!-- New element to display the chosen object for the drawing player -->
-      <div id="objectDisplay" style="position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 14px; color: #000; display: none;"></div>
       <!-- Turn prompt overlay (used for object selection in decision phase) -->
       <div id="turnPrompt">
         <div id="turnMessage">
@@ -87,8 +89,6 @@
           <div id="countdownDisplay">10</div>
         </div>
       </div>
-      <!-- Draw phase countdown display at top right of canvas -->
-      <div id="drawCountdown" class="drawCountdown" style="display: none;"></div>
     </div>
 
     <!-- Bottom box container (chat and players list) -->

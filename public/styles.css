@@ -38,16 +38,16 @@ body, html {
 #canvasContainer {
   position: relative;
   background-color: #fff;
-  overflow: hidden;  /* Prevent the turn prompt from overflowing */
+  overflow: hidden;
 }
 
 /* Dash hint above the canvas */
 #dashHint {
   text-align: center;
-  font-size: 24px;
+  font-size: 16px; /* reduced font size */
   font-weight: bold;
-  margin-bottom: 10px;
-  letter-spacing: 5px;
+  margin-bottom: 5px;
+  letter-spacing: 3px; /* reduced letter-spacing */
 }
 
 /* Canvas styling */
@@ -85,13 +85,37 @@ body, html {
   cursor: pointer;
 }
 
-/* Draw controls (Undo, Clear, Give Up) */
-#drawControls {
+/* Status bar for drawing controls, chosen object, and countdown */
+#statusBar {
   position: absolute;
   top: 5px;
   left: 5px;
+  right: 5px;
   display: flex;
-  gap: 5px;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+/* Draw controls */
+#drawControls button {
+  margin-right: 5px;
+}
+
+/* Object display */
+#objectDisplay {
+  font-size: 12px;
+  color: #000;
+  text-align: center;
+}
+
+/* Draw phase countdown display */
+.drawCountdown {
+  font-size: 14px;
+  color: #fff;
+  background-color: rgba(0,128,0,0.8);
+  padding: 5px 10px;
+  border-radius: 5px;
 }
 
 /* Turn prompt overlay (used for object selection in decision phase) */
@@ -105,20 +129,7 @@ body, html {
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1; /* Ensure it stays below the box container */
-}
-
-/* Draw phase countdown display */
-#drawCountdown {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  background-color: rgba(0,128,0,0.8);
-  color: white;
-  padding: 5px 10px;
-  border-radius: 5px;
-  font-size: 16px;
-  display: none;
+  z-index: 1;
 }
 
 /* Box container for chat/players */
@@ -128,7 +139,7 @@ body, html {
   display: flex;
   flex-direction: column;
   position: relative;
-  z-index: 10; /* Bring this above canvas overlays */
+  z-index: 10;
 }
 
 /* Box header */
@@ -157,7 +168,7 @@ body, html {
 }
 
 .boxView {
-  font-size: 16px; /* fixed font size for messages and players */
+  font-size: 16px;
 }
 
 /* Chat input area */

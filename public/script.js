@@ -45,7 +45,6 @@ joinBtn.addEventListener('click', () => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
           if (lobby.passcode === "") {
-            // Directly join if no passcode is required.
             btn.addEventListener('click', () => {
               socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
             });
@@ -75,13 +74,11 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
-  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
-  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -91,7 +88,8 @@ const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
 const drawControlsDiv = document.getElementById('drawControls');
-const objectDisplayElem = document.getElementById('objectDisplay'); // new element
+const objectDisplayElem = document.getElementById('objectDisplay');
+const drawCountdown = document.getElementById('drawCountdown');
 
 // Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
@@ -132,7 +130,6 @@ const toggleBoxBtn = document.getElementById('toggleBox');
 const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
 
-// Modified toggle event: use a flag to control view switching, ensuring all players can toggle.
 toggleBoxBtn.addEventListener('click', () => {
   if(isChatView){
     chatBox.style.display = 'none';
@@ -172,6 +169,7 @@ function updatePlayerList(playersArr) {
 }
 
 // --- Dash hint update function ---
+// Now handling only 1-word and 2-word objects.
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -206,29 +204,8 @@ function updateDashHint() {
     }
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
-  } else if (words.length === 3) {
-    let [word1, word2, word3] = words;
-    let r1 = "", r2 = "", r3 = "";
-    if (currentDrawTime <= 50) { r1 = word1.charAt(0); }
-    if (currentDrawTime <= 30) { r2 = word2.charAt(0); }
-    if (currentDrawTime <= 10) { r3 = word3.charAt(0); }
-    let disp1 = "";
-    for (let i = 0; i < word1.length; i++) {
-      disp1 += (i < r1.length ? word1.charAt(i) : "_") + " ";
-    }
-    let disp2 = "";
-    for (let i = 0; i < word2.length; i++) {
-      disp2 += (i < r2.length ? word2.charAt(i) : "_") + " ";
-    }
-    let disp3 = "";
-    for (let i = 0; i < word3.length; i++) {
-      disp3 += (i < r3.length ? word3.charAt(i) : "_") + " ";
-    }
-    hintWords.push(disp1.trim());
-    hintWords.push(disp2.trim());
-    hintWords.push(disp3.trim());
   }
-  dashHintDiv.textContent = hintWords.join("   ");
+  dashHintDiv.textContent = hintWords.join("    "); // 4 spaces between words
 }
 
 // --- Socket events ---
@@ -284,14 +261,12 @@ const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const turnOptionsDiv = document.getElementById('turnOptions');
 const countdownDisplay = document.getElementById('countdownDisplay');
-const drawCountdown = document.getElementById('drawCountdown');
 
 socket.on('turnStarted', (data) => {
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
     turnPrompt.style.display = 'flex';
-    // For drawing player, if an object has been chosen, show it
     if(currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
@@ -343,7 +318,6 @@ socket.on('objectChosenBroadcast', (data) => {
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
-  // For drawing player, update object display
   if(isMyTurn) {
     objectDisplayElem.style.display = 'block';
     objectDisplayElem.textContent = data.object;
@@ -387,7 +361,6 @@ socket.on('drawPhaseTimeout', () => {
   objectDisplayElem.textContent = '';
 });
 
-// --- Drawing functions ---
 function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
@@ -464,7 +437,6 @@ function undoLastStroke() {
   redrawStrokes();
 }
 
-// --- Drawing tools ---
 const thicknessButtons = document.querySelectorAll('.thickness');
 thicknessButtons.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -479,7 +451,6 @@ colorButtons.forEach(btn => {
   });
 });
 
-// --- Draw control buttons ---
 document.getElementById('undoBtn').addEventListener('click', () => {
   if(isMyTurn) {
     socket.emit('undo');
@@ -508,7 +479,6 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
   }
 });
 
-// --- Keyboard adjustments ---
 chatInput.addEventListener('focus', () => {
   resizeLayout();
 });
