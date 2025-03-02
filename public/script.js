@@ -230,15 +230,22 @@ function updateDashHint() {
 }
 
 // --- Socket events ---
+
+// Adjusted init handler to set turnPrompt pointer events for viewers
 socket.on('init', (data) => {
   updatePlayerList(data.players);
   if(data.canvasStrokes) {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  // If there is an ongoing decision countdown, show the turn prompt for viewers
   if(data.decisionTimeLeft !== null && data.currentDrawer) {
+    // Retrieve turn prompt elements locally
+    const turnPrompt = document.getElementById('turnPrompt');
+    const promptText = document.getElementById('promptText');
+    const turnOptionsDiv = document.getElementById('turnOptions');
+    const countdownDisplay = document.getElementById('countdownDisplay');
     turnPrompt.style.display = 'flex';
+    turnPrompt.style.pointerEvents = 'none'; // viewers cannot interact with the overlay
     promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
     turnOptionsDiv.innerHTML = "";
     countdownDisplay.textContent = data.decisionTimeLeft;
@@ -279,44 +286,50 @@ socket.on('undo', () => {
 });
 
 // Turn and object selection events
-const turnPrompt = document.getElementById('turnPrompt');
-const promptText = document.getElementById('promptText');
-const turnOptionsDiv = document.getElementById('turnOptions');
-const countdownDisplay = document.getElementById('countdownDisplay');
-const drawCountdown = document.getElementById('drawCountdown');
-
 socket.on('turnStarted', (data) => {
-  // data contains currentDrawer, duration, currentDrawerRank, currentDrawerName
+  // Retrieve turn prompt elements locally
+  const turnPrompt = document.getElementById('turnPrompt');
+  const promptText = document.getElementById('promptText');
+  const turnOptionsDiv = document.getElementById('turnOptions');
+  
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
-    // For the drawing player, show the object selection prompt.
     turnPrompt.style.display = 'flex';
+    turnPrompt.style.pointerEvents = 'auto'; // allow interaction for drawing player
   } else {
     isMyTurn = false;
-    // For non-drawing players, show a message indicating who is choosing.
     turnPrompt.style.display = 'flex';
     promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
     turnOptionsDiv.innerHTML = "";
+    turnPrompt.style.pointerEvents = 'none'; // disable overlay interactions for viewers
   }
   drawControlsDiv.style.display = (data.currentDrawer === socket.id) ? 'block' : 'none';
 });
 
 socket.on('turnCountdown', (timeLeft) => {
-  if(turnPrompt.style.display !== 'none') {
+  const countdownDisplay = document.getElementById('countdownDisplay');
+  if(document.getElementById('turnPrompt').style.display !== 'none') {
     countdownDisplay.textContent = timeLeft;
   }
 });
 
 socket.on('turnTimeout', () => {
+  const turnPrompt = document.getElementById('turnPrompt');
   turnPrompt.style.display = 'none';
   isMyTurn = false;
 });
 
 socket.on('objectSelection', (data) => {
+  const turnPrompt = document.getElementById('turnPrompt');
+  const promptText = document.getElementById('promptText');
+  const turnOptionsDiv = document.getElementById('turnOptions');
+  const countdownDisplay = document.getElementById('countdownDisplay');
   if(data.options && data.options.length > 0) {
     isMyTurn = true;
     turnPrompt.style.display = 'flex';
+    // For object selection, allow full interaction.
+    turnPrompt.style.pointerEvents = 'auto';
     promptText.textContent = "Choose an object to draw:";
     turnOptionsDiv.innerHTML = '';
     data.options.forEach(option => {
@@ -341,6 +354,7 @@ socket.on('objectChosenBroadcast', (data) => {
 });
 
 socket.on('drawPhaseStarted', (data) => {
+  const turnPrompt = document.getElementById('turnPrompt');
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'none';
@@ -350,7 +364,6 @@ socket.on('drawPhaseStarted', (data) => {
     drawControlsDiv.style.display = 'block';
   } else {
     isMyTurn = false;
-    // Hide the turn prompt for non-drawing players once the object is chosen.
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
