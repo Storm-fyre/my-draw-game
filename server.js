@@ -30,6 +30,7 @@ function createLobbyState() {
     guessedCorrectly: {},
     turnTimer: null,
     currentDrawTimeLeft: 0
+    // We'll add currentDecisionTimeLeft dynamically when needed
   };
 }
 
@@ -128,8 +129,10 @@ function startNextTurn(lobbyName) {
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
   let timeLeft = DECISION_DURATION;
+  state.currentDecisionTimeLeft = timeLeft; // set decision countdown tracking
   state.turnTimer = setInterval(() => {
     timeLeft--;
+    state.currentDecisionTimeLeft = timeLeft;
     io.to(lobbyName).emit('turnCountdown', timeLeft);
     if (timeLeft <= 0) {
       clearInterval(state.turnTimer);
@@ -173,7 +176,12 @@ io.on('connection', (socket) => {
         return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
       }),
       chatMessages: [],
-      canvasStrokes: state.canvasStrokes
+      canvasStrokes: state.canvasStrokes,
+      // Include decision phase countdown and current drawer info if still choosing:
+      decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
+      currentDrawer: state.currentDrawer || null,
+      currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname : null,
+      currentDrawerRank: state.currentDrawer ? state.playerOrder.indexOf(state.currentDrawer) + 1 : null
     });
     io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
       let player = state.players[id];
@@ -192,8 +200,10 @@ io.on('connection', (socket) => {
       const options = getRandomObjects(3);
       io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
       let timeLeft = DECISION_DURATION;
+      state.currentDecisionTimeLeft = timeLeft;  // set decision countdown tracking
       state.turnTimer = setInterval(() => {
         timeLeft--;
+        state.currentDecisionTimeLeft = timeLeft;
         io.to(lobbyName).emit('turnCountdown', timeLeft);
         if (timeLeft <= 0) {
           clearInterval(state.turnTimer);

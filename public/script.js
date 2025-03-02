@@ -236,6 +236,13 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
+  // If there is an ongoing decision countdown, show the turn prompt for viewers
+  if(data.decisionTimeLeft !== null && data.currentDrawer) {
+    turnPrompt.style.display = 'flex';
+    promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
+    turnOptionsDiv.innerHTML = "";
+    countdownDisplay.textContent = data.decisionTimeLeft;
+  }
 });
 
 socket.on('chatMessage', (data) => {
