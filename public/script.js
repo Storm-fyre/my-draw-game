@@ -36,7 +36,6 @@ joinBtn.addEventListener('click', () => {
   if(name) {
     nickname = name;
     nicknameModal.style.display = 'none';
-    // Fetch lobby list from the server
     fetch('/lobbies')
       .then(res => res.json())
       .then(data => {
@@ -91,7 +90,6 @@ const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
-// Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   paths.forEach(stroke => {
@@ -102,19 +100,20 @@ function redrawStrokes() {
   }
 }
 
-// Dynamic layout: canvas remains square; bottom box adjusts accordingly.
 function resizeLayout() {
   const gameContainer = document.getElementById('gameContainer');
   const boxContainer = document.getElementById('boxContainer');
   const canvasContainer = document.getElementById('canvasContainer');
+  const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
 
+  const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
   const totalHeight = gameContainer.clientHeight;
-  const boxHeight = totalHeight - width;
+  const boxHeight = totalHeight - width - toolsHeight;
   boxContainer.style.height = boxHeight + "px";
 
   redrawStrokes();
@@ -168,8 +167,7 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function ---
-// (Only handling 1-word and 2-word objects.)
+// --- Dash hint update function --- (only 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -205,10 +203,9 @@ function updateDashHint() {
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   }
-  dashHintDiv.textContent = hintWords.join("    "); // 4 spaces between words
+  dashHintDiv.textContent = hintWords.join("    ");
 }
 
-// --- Socket events ---
 socket.on('init', (data) => {
   updatePlayerList(data.players);
   if(data.canvasStrokes) {
@@ -361,7 +358,6 @@ socket.on('drawPhaseTimeout', () => {
   objectDisplayElem.textContent = '';
 });
 
-// --- Drawing functions ---
 function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
@@ -406,16 +402,9 @@ canvas.addEventListener('mousemove', drawingMove);
 canvas.addEventListener('mouseup', stopDrawing);
 canvas.addEventListener('mouseout', stopDrawing);
 
-canvas.addEventListener('touchstart', (e) => {
-  startDrawing(e);
-});
-canvas.addEventListener('touchmove', (e) => {
-  drawingMove(e);
-  e.preventDefault();
-});
-canvas.addEventListener('touchend', (e) => {
-  stopDrawing(e);
-});
+canvas.addEventListener('touchstart', (e) => { startDrawing(e); });
+canvas.addEventListener('touchmove', (e) => { drawingMove(e); e.preventDefault(); });
+canvas.addEventListener('touchend', (e) => { stopDrawing(e); });
 
 function drawStroke(data, emitLocal) {
   if(!data.path || data.path.length < 2) return;
@@ -445,44 +434,20 @@ function undoLastStroke() {
   redrawStrokes();
 }
 
-// --- Handle thickness changes (still hover-based) ---
-const thicknessDropdownBtn = document.getElementById('thicknessDropdownBtn');
 const thicknessButtons = document.querySelectorAll('.thickness');
 thicknessButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentThickness = parseInt(btn.getAttribute('data-size'));
-    thicknessDropdownBtn.textContent = `Thickness: ${currentThickness}px`;
   });
 });
 
-// --- Handle color changes (click-based dropdown) ---
-const colorDropdownBtn = document.getElementById('colorDropdownBtn');
-const colorDropdownContent = document.getElementById('colorDropdownContent');
 const colorButtons = document.querySelectorAll('.color');
-
-// Toggle color dropdown on button click
-colorDropdownBtn.addEventListener('click', (e) => {
-  e.stopPropagation(); // so it doesn't immediately close if we click the button
-  colorDropdownContent.classList.toggle('show');
-});
-
-// If user clicks a color, apply it and close the dropdown
 colorButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentColor = btn.getAttribute('data-color');
-    colorDropdownBtn.style.background = currentColor;
-    colorDropdownContent.classList.remove('show');
   });
 });
 
-// Close the dropdown if the user clicks anywhere outside it
-document.addEventListener('click', (e) => {
-  if (!colorDropdownContent.contains(e.target) && e.target !== colorDropdownBtn) {
-    colorDropdownContent.classList.remove('show');
-  }
-});
-
-// --- Draw control buttons ---
 document.getElementById('undoBtn').addEventListener('click', () => {
   if(isMyTurn) {
     socket.emit('undo');
@@ -511,7 +476,6 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
   }
 });
 
-// --- Keyboard adjustments ---
 chatInput.addEventListener('focus', () => {
   resizeLayout();
 });
