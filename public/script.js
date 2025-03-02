@@ -169,7 +169,7 @@ function updatePlayerList(playersArr) {
 }
 
 // --- Dash hint update function ---
-// Now handling only 1-word and 2-word objects.
+// (Only handling 1-word and 2-word objects.)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -361,6 +361,7 @@ socket.on('drawPhaseTimeout', () => {
   objectDisplayElem.textContent = '';
 });
 
+// --- Drawing functions ---
 function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
@@ -405,9 +406,16 @@ canvas.addEventListener('mousemove', drawingMove);
 canvas.addEventListener('mouseup', stopDrawing);
 canvas.addEventListener('mouseout', stopDrawing);
 
-canvas.addEventListener('touchstart', (e) => { startDrawing(e); });
-canvas.addEventListener('touchmove', (e) => { drawingMove(e); e.preventDefault(); });
-canvas.addEventListener('touchend', (e) => { stopDrawing(e); });
+canvas.addEventListener('touchstart', (e) => {
+  startDrawing(e);
+});
+canvas.addEventListener('touchmove', (e) => {
+  drawingMove(e);
+  e.preventDefault();
+});
+canvas.addEventListener('touchend', (e) => {
+  stopDrawing(e);
+});
 
 function drawStroke(data, emitLocal) {
   if(!data.path || data.path.length < 2) return;
@@ -437,20 +445,26 @@ function undoLastStroke() {
   redrawStrokes();
 }
 
+// --- Handle thickness and color changes ---
+const thicknessDropdownBtn = document.getElementById('thicknessDropdownBtn');
 const thicknessButtons = document.querySelectorAll('.thickness');
 thicknessButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentThickness = parseInt(btn.getAttribute('data-size'));
+    thicknessDropdownBtn.textContent = `Thickness: ${currentThickness}px`;
   });
 });
 
+const colorDropdownBtn = document.getElementById('colorDropdownBtn');
 const colorButtons = document.querySelectorAll('.color');
 colorButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     currentColor = btn.getAttribute('data-color');
+    colorDropdownBtn.style.background = currentColor;
   });
 });
 
+// --- Draw control buttons ---
 document.getElementById('undoBtn').addEventListener('click', () => {
   if(isMyTurn) {
     socket.emit('undo');
@@ -479,6 +493,7 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
   }
 });
 
+// --- Keyboard adjustments ---
 chatInput.addEventListener('focus', () => {
   resizeLayout();
 });
