@@ -15,6 +15,9 @@ let currentRemoteStroke = null;
 let currentObjectStr = null;
 let currentDrawTime = null;
 
+// Flag to track current view of the box (true = Chat, false = Players)
+let isChatView = true;
+
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
@@ -128,16 +131,16 @@ const toggleBoxBtn = document.getElementById('toggleBox');
 const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
 
-// Modified toggle event: use computed style to reliably determine current display state.
+// Modified toggle event: use a flag to control view switching, ensuring all players can toggle.
 toggleBoxBtn.addEventListener('click', () => {
-  const chatDisplay = window.getComputedStyle(chatBox).display;
-  if(chatDisplay === 'none'){
-    chatBox.style.display = 'block';
-    playerBox.style.display = 'none';
-  } else {
+  if(isChatView){
     chatBox.style.display = 'none';
     playerBox.style.display = 'block';
+  } else {
+    chatBox.style.display = 'block';
+    playerBox.style.display = 'none';
   }
+  isChatView = !isChatView;
 });
 
 const chatInput = document.getElementById('chatInput');
