@@ -40,11 +40,11 @@
       <div id="toolsBar">
         <div id="brushThickness">
           <span>Thickness:</span>
+          <button class="thickness" data-size="1">1px</button>
           <button class="thickness" data-size="2">2px</button>
           <button class="thickness" data-size="4">4px</button>
           <button class="thickness" data-size="6">6px</button>
           <button class="thickness" data-size="8">8px</button>
-          <button class="thickness" data-size="10">10px</button>
         </div>
         <div id="brushColors">
           <span>Colors:</span>
@@ -75,6 +75,8 @@
         <button id="clearBtn">Clear</button>
         <button id="giveUpBtn">Give Up</button>
       </div>
+      <!-- New element to display the chosen object for the drawing player -->
+      <div id="objectDisplay" style="position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 14px; color: #000; display: none;"></div>
       <!-- Turn prompt overlay (used for object selection in decision phase) -->
       <div id="turnPrompt">
         <div id="turnMessage">
@@ -110,9 +112,9 @@
         <button id="sendChat">Send</button>
       </div>
     </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
   </div>
-  
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js"></script>
 </body>
 </html>

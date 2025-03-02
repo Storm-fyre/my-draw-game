@@ -91,6 +91,7 @@ const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
 const drawControlsDiv = document.getElementById('drawControls');
+const objectDisplayElem = document.getElementById('objectDisplay'); // new element
 
 // Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
@@ -171,10 +172,6 @@ function updatePlayerList(playersArr) {
 }
 
 // --- Dash hint update function ---
-// Reveal schedule:
-// Single word: ≤50 sec: reveal letter1, ≤30: letter2, ≤10: letter3.
-// Two words: ≤50: first letter of word1, ≤30: first letter of word2, ≤10: second letter of word1.
-// Three words: ≤50: first letter of word1, ≤30: first letter of word2, ≤10: first letter of word3.
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -241,7 +238,6 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  // If there is an ongoing decision countdown, show the turn prompt for viewers
   if(data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
     promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
@@ -291,18 +287,22 @@ const countdownDisplay = document.getElementById('countdownDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
 socket.on('turnStarted', (data) => {
-  // data contains currentDrawer, duration, currentDrawerRank, currentDrawerName
   if(data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
-    // For the drawing player, show the object selection prompt.
     turnPrompt.style.display = 'flex';
+    // For drawing player, if an object has been chosen, show it
+    if(currentObjectStr) {
+      objectDisplayElem.style.display = 'block';
+      objectDisplayElem.textContent = currentObjectStr;
+    }
   } else {
     isMyTurn = false;
-    // For non-drawing players, show a message indicating who is choosing.
     turnPrompt.style.display = 'flex';
     promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
     turnOptionsDiv.innerHTML = "";
+    objectDisplayElem.style.display = 'none';
+    objectDisplayElem.textContent = '';
   }
   drawControlsDiv.style.display = (data.currentDrawer === socket.id) ? 'block' : 'none';
 });
@@ -316,6 +316,8 @@ socket.on('turnCountdown', (timeLeft) => {
 socket.on('turnTimeout', () => {
   turnPrompt.style.display = 'none';
   isMyTurn = false;
+  objectDisplayElem.style.display = 'none';
+  objectDisplayElem.textContent = '';
 });
 
 socket.on('objectSelection', (data) => {
@@ -337,12 +339,15 @@ socket.on('objectSelection', (data) => {
   }
 });
 
-// When the drawing player chooses an object, broadcast it so non-drawing players can show dash hint.
-// Also hide the turn prompt for non-drawing players.
 socket.on('objectChosenBroadcast', (data) => {
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
+  // For drawing player, update object display
+  if(isMyTurn) {
+    objectDisplayElem.style.display = 'block';
+    objectDisplayElem.textContent = data.object;
+  }
 });
 
 socket.on('drawPhaseStarted', (data) => {
@@ -353,13 +358,18 @@ socket.on('drawPhaseStarted', (data) => {
     drawCountdown.textContent = data.duration;
     dashHintDiv.textContent = "";
     drawControlsDiv.style.display = 'block';
+    if(currentObjectStr) {
+      objectDisplayElem.style.display = 'block';
+      objectDisplayElem.textContent = currentObjectStr;
+    }
   } else {
     isMyTurn = false;
-    // Hide the turn prompt for non-drawing players once the object is chosen.
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
     drawControlsDiv.style.display = 'none';
+    objectDisplayElem.style.display = 'none';
+    objectDisplayElem.textContent = '';
   }
 });
 
@@ -373,6 +383,8 @@ socket.on('drawPhaseTimeout', () => {
   drawCountdown.style.display = 'none';
   isMyTurn = false;
   dashHintDiv.textContent = "";
+  objectDisplayElem.style.display = 'none';
+  objectDisplayElem.textContent = '';
 });
 
 // --- Drawing functions ---
@@ -491,11 +503,12 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
     isMyTurn = false;
     drawCountdown.style.display = 'none';
     dashHintDiv.textContent = "";
+    objectDisplayElem.style.display = 'none';
+    objectDisplayElem.textContent = '';
   }
 });
 
 // --- Keyboard adjustments ---
-// Using the on-screen keyboard should only trigger a layout resize, not clear the canvas.
 chatInput.addEventListener('focus', () => {
   resizeLayout();
 });
