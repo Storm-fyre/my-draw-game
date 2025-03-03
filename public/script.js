@@ -5,8 +5,7 @@ let isDrawing = false;
 let currentPath = [];
 let paths = []; // stored complete strokes
 let currentColor = "#000000";
-// Default thickness is now 2px.
-let currentThickness = 2;
+let currentThickness = 2; // default is now 2px
 let isMyTurn = false;
 
 // For non-drawing players: store current remote stroke
@@ -77,6 +76,14 @@ joinLobbyBtn.addEventListener('click', () => {
   }
 });
 
+// Listen for autoSetNickname event from server
+socket.on('autoSetNickname', (data) => {
+  // Automatically use stored nickname and hide nickname modal.
+  socket.emit('setNickname', data.nickname);
+  nickname = data.nickname;
+  nicknameModal.style.display = 'none';
+});
+
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
   socket.emit('setNickname', nickname);
@@ -102,7 +109,7 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Adjust layout when keyboard is active.
+// Layout adjustment when keyboard is active.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -112,12 +119,13 @@ function adjustLayoutForKeyboard(active) {
     isKeyboardActive = true;
     // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
+    // Canvas container becomes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
     canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width and height equals canvas height.
+    // Message box takes 25% of width, height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
     // Hide tools section.
@@ -144,6 +152,7 @@ function resizeLayout() {
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
+  // Canvas is full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
@@ -180,8 +189,6 @@ toggleBoxBtn.addEventListener('click', () => {
   isChatView = !isChatView;
 });
 
-const chatInput = document.getElementById('chatInput');
-
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -198,7 +205,7 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  // If nickname is non-empty, display with colon; otherwise, show only the message.
+  // If nickname is non-empty, add colon; otherwise, display only the message.
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
@@ -226,7 +233,7 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (handles only 1-word and 2-word objects)
+// --- Dash hint update function --- (for 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -272,8 +279,8 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
+  // For non-drawing players, if a lobbyMessage is provided, the client can show it.
   if (data.decisionTimeLeft !== null && data.currentDrawer) {
-    turnPrompt.style.display = 'flex';
     // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";

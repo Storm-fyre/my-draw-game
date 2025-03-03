@@ -19,6 +19,9 @@ app.get('/lobbies', (req, res) => {
 // Global object for active lobby game states (keyed by lobby name)
 let activeLobbies = {};
 
+// Global store for recent nicknames (key: socket.handshake.address)
+let recentNicknames = {};
+
 function createLobbyState() {
   return {
     players: {},        // socket.id -> { nickname, score }
@@ -114,7 +117,7 @@ function startNextTurn(lobbyName) {
     }
   }
   
-  // Send only the uppercase name (no rank info)
+  // Send only the uppercase name (no rank info, no colon)
   let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
@@ -156,6 +159,11 @@ io.on('connection', (socket) => {
       activeLobbies[data.lobbyName] = createLobbyState();
     }
     socket.emit('lobbyJoined', { lobby: data.lobbyName });
+    // Check if a recent nickname exists for this IP.
+    const ip = socket.handshake.address;
+    if (recentNicknames[ip] && (Date.now() - recentNicknames[ip].timestamp < 300000)) {
+      socket.emit('autoSetNickname', { nickname: recentNicknames[ip].nickname });
+    }
   });
   
   // --- After joining a lobby, set nickname ---
@@ -165,46 +173,67 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // Broadcast join notification in full uppercase without colon.
+    // Store nickname for 5 minutes using the player's IP.
+    const ip = socket.handshake.address;
+    recentNicknames[ip] = { nickname, timestamp: Date.now() };
+    
+    // Broadcast join notification in uppercase with no colon.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
-    socket.emit('init', {
-      players: state.playerOrder.map(id => {
+    
+    // If only one player, send init with lobbyMessage.
+    if (state.playerOrder.length === 1) {
+      socket.emit('init', {
+        players: state.playerOrder.map(id => {
+          let player = state.players[id];
+          return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+        }),
+        canvasStrokes: state.canvasStrokes,
+        lobbyMessage: "OH DEAR, SEEMS LIKE YOU ARE ONLY ONE IN THE LOBBY",
+        decisionTimeLeft: null,
+        currentDrawer: null,
+        currentDrawerName: null
+      });
+    } else {
+      // More than one player—start game if not already started.
+      socket.emit('init', {
+        players: state.playerOrder.map(id => {
+          let player = state.players[id];
+          return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+        }),
+        canvasStrokes: state.canvasStrokes,
+        lobbyMessage: "",
+        decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
+        currentDrawer: state.currentDrawer || null,
+        currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname.toUpperCase() : null
+      });
+      io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
         let player = state.players[id];
         return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-      }),
-      chatMessages: [],
-      canvasStrokes: state.canvasStrokes,
-      decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
-      currentDrawer: state.currentDrawer || null,
-      currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname.toUpperCase() : null
-    });
-    io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
-      let player = state.players[id];
-      return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-    }));
-    if (!state.currentDrawer) {
-      state.currentDrawer = socket.id;
-      let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
-      io.to(lobbyName).emit('turnStarted', { 
-        currentDrawer: state.currentDrawer, 
-        duration: DECISION_DURATION,
-        currentDrawerName: currentDrawerName
-      });
-      const options = getRandomObjects(3);
-      io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-      let timeLeft = DECISION_DURATION;
-      state.currentDecisionTimeLeft = timeLeft;
-      state.turnTimer = setInterval(() => {
-        timeLeft--;
+      }));
+      if (!state.currentDrawer) {
+        state.currentDrawer = state.playerOrder[0];
+        let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
+        io.to(lobbyName).emit('turnStarted', { 
+          currentDrawer: state.currentDrawer, 
+          duration: DECISION_DURATION,
+          currentDrawerName: currentDrawerName
+        });
+        const options = getRandomObjects(3);
+        io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
+        let timeLeft = DECISION_DURATION;
         state.currentDecisionTimeLeft = timeLeft;
-        io.to(lobbyName).emit('turnCountdown', timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(state.turnTimer);
-          state.turnTimer = null;
-          io.to(state.currentDrawer).emit('turnTimeout');
-          startNextTurn(lobbyName);
-        }
-      }, 1000);
+        state.turnTimer = setInterval(() => {
+          timeLeft--;
+          state.currentDecisionTimeLeft = timeLeft;
+          io.to(lobbyName).emit('turnCountdown', timeLeft);
+          if (timeLeft <= 0) {
+            clearInterval(state.turnTimer);
+            state.turnTimer = null;
+            io.to(state.currentDrawer).emit('turnTimeout');
+            startNextTurn(lobbyName);
+          }
+        }, 1000);
+      }
     }
   });
   
