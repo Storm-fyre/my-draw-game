@@ -18,9 +18,6 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
-// Auto-scroll flag for chat; default is true (we want to show the latest messages)
-let autoScrollEnabled = true;
-
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
@@ -39,7 +36,6 @@ joinBtn.addEventListener('click', () => {
   if(name) {
     nickname = name;
     nicknameModal.style.display = 'none';
-    // Fetch lobby list from the server
     fetch('/lobbies')
       .then(res => res.json())
       .then(data => {
@@ -66,7 +62,6 @@ joinBtn.addEventListener('click', () => {
   }
 });
 
-// Handle joining lobby after passcode entry
 joinLobbyBtn.addEventListener('click', () => {
   const lobbyName = selectedLobbyNameElem.getAttribute('data-lobby');
   const passcode = lobbyPasscodeInput.value.trim();
@@ -77,13 +72,11 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
-  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
-  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -108,23 +101,58 @@ function redrawStrokes() {
 
 function resizeLayout() {
   const gameContainer = document.getElementById('gameContainer');
-  const boxContainer = document.getElementById('boxContainer');
   const canvasContainer = document.getElementById('canvasContainer');
   const toolsBar = document.getElementById('toolsBar');
-
-  const width = gameContainer.clientWidth;
-  // Set canvas dimensions: full width and 85% of width as height.
-  canvas.width = width;
-  const canvasHeight = width * 0.85;
-  canvas.height = canvasHeight;
-  canvasContainer.style.height = canvasHeight + "px";
-
-  const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
+  const boxContainer = document.getElementById('boxContainer');
   const totalHeight = gameContainer.clientHeight;
-  // Remaining height goes to the message box.
-  const boxHeight = totalHeight - canvasHeight - toolsHeight;
-  boxContainer.style.height = boxHeight + "px";
-
+  const containerWidth = gameContainer.clientWidth;
+  
+  // Check if the chat input is focused (keyboard is active)
+  const keyboardActive = (document.activeElement === document.getElementById('chatInput'));
+  
+  if (keyboardActive) {
+    // Keyboard mode:
+    // - Canvas is 75% of containerWidth (square)
+    // - Message box is 25% of containerWidth, and height equal to canvas side.
+    const canvasSide = containerWidth * 0.75;
+    canvas.width = canvasSide;
+    canvas.height = canvasSide;
+    canvasContainer.style.width = canvasSide + "px";
+    canvasContainer.style.height = canvasSide + "px";
+    
+    // Position canvasContainer at top left.
+    canvasContainer.style.display = "inline-block";
+    
+    // Set boxContainer (chat box) to occupy remaining 25% width, same height as canvas.
+    boxContainer.style.width = containerWidth * 0.25 + "px";
+    boxContainer.style.height = canvasSide + "px";
+    boxContainer.style.display = "inline-block";
+    
+    // In keyboard mode, we want to display canvasContainer and boxContainer side-by-side.
+    // We adjust the parent container's flex direction.
+    gameContainer.style.flexDirection = "row";
+    
+    // Optionally, hide toolsBar if needed or keep it as is.
+    // We'll leave toolsBar unchanged.
+  } else {
+    // Normal mode:
+    // - Canvas is a square with side = containerWidth.
+    // - ToolsBar remains below the canvas.
+    // - Message box takes the remaining vertical space.
+    gameContainer.style.flexDirection = "column";
+    canvasContainer.style.display = "block";
+    boxContainer.style.display = "block";
+    
+    canvas.width = containerWidth;
+    canvas.height = containerWidth;
+    canvasContainer.style.height = containerWidth + "px";
+    
+    const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
+    const boxHeight = totalHeight - containerWidth - toolsHeight;
+    boxContainer.style.height = boxHeight + "px";
+    boxContainer.style.width = "100%";
+  }
+  
   redrawStrokes();
   updateDashHint();
 }
@@ -133,8 +161,6 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Ensure chat box is scrolled to bottom on load.
-  chatBox.scrollTop = chatBox.scrollHeight;
 });
 
 // --- Chat and Player Box ---
@@ -175,14 +201,13 @@ sendChatBtn.addEventListener('click', () => {
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
-  // Insert new message at the top of chatBox.
+  // Insert new message at the top
   if(chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
-  
-  // Enforce message limit: keep only the last 30 messages (remove from bottom)
+  // Enforce message limit: keep only 30 messages (remove from bottom)
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
