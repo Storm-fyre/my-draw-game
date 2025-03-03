@@ -18,7 +18,7 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
-// New flag to control auto-scroll for chat
+// Auto-scroll flag for chat; default is true (latest messages are visible)
 let autoScrollEnabled = true;
 
 // --- Modal Elements ---
@@ -131,7 +131,12 @@ function resizeLayout() {
 
 window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
-document.addEventListener('DOMContentLoaded', resizeLayout);
+document.addEventListener('DOMContentLoaded', () => {
+  resizeLayout();
+  // Ensure chat box is scrolled to the bottom by default.
+  const chatBox = document.getElementById('chatBox');
+  chatBox.scrollTop = chatBox.scrollHeight;
+});
 
 // --- Chat and Player Box ---
 const toggleBoxBtn = document.getElementById('toggleBox');
@@ -149,19 +154,19 @@ toggleBoxBtn.addEventListener('click', () => {
   isChatView = !isChatView;
 });
 
-const chatInput = document.getElementById('chatInput');
-const sendChatBtn = document.getElementById('sendChat');
-
-// --- Auto-scroll logic for chat box ---
-// Auto-scroll will remain active only if the user is scrolled to the bottom (with a tolerance)
+// --- Auto-scroll logic for chat ---
+// When the user scrolls the chat box, check if they are near the bottom.
 chatBox.addEventListener('scroll', () => {
-  const threshold = 20; // pixels
-  if(chatBox.scrollTop + chatBox.clientHeight < chatBox.scrollHeight - threshold) {
-    autoScrollEnabled = false;
-  } else {
+  const threshold = 50; // pixels from bottom
+  if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < threshold) {
     autoScrollEnabled = true;
+  } else {
+    autoScrollEnabled = false;
   }
 });
+
+const chatInput = document.getElementById('chatInput');
+const sendChatBtn = document.getElementById('sendChat');
 
 sendChatBtn.addEventListener('click', () => {
   const msg = chatInput.value.trim();
@@ -175,7 +180,7 @@ function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
   chatBox.appendChild(p);
-  // Auto-scroll only if user is at (or very near) the bottom.
+  // If auto-scroll is enabled, always scroll to the bottom.
   if(autoScrollEnabled) {
     chatBox.scrollTop = chatBox.scrollHeight;
   }
@@ -227,7 +232,7 @@ function updateDashHint() {
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   }
-  dashHintDiv.textContent = hintWords.join("    "); // clear gap between words
+  dashHintDiv.textContent = hintWords.join("    ");
 }
 
 // --- Socket events ---
