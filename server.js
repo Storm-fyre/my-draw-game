@@ -114,7 +114,7 @@ function startNextTurn(lobbyName) {
     }
   }
   
-  // Send only the uppercase name
+  // Send only the uppercase name (no rank info)
   let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
@@ -143,7 +143,7 @@ function startNextTurn(lobbyName) {
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
   
-  // Lobby joining
+  // --- Lobby joining ---
   socket.on('joinLobby', (data) => {
     const lobbyEntry = lobbyInfo.find(l => l.name === data.lobbyName);
     if (!lobbyEntry || (lobbyEntry.passcode && lobbyEntry.passcode !== data.passcode)) {
@@ -158,13 +158,14 @@ io.on('connection', (socket) => {
     socket.emit('lobbyJoined', { lobby: data.lobbyName });
   });
   
-  // Set nickname and handle waiting
+  // --- After joining a lobby, set nickname ---
   socket.on('setNickname', (nickname) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
+    // Broadcast join notification in full uppercase without colon.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
     socket.emit('init', {
       players: state.playerOrder.map(id => {
@@ -181,40 +182,16 @@ io.on('connection', (socket) => {
       let player = state.players[id];
       return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
     }));
-    
-    // If only one player is in the lobby, send waiting message.
+    // If only one player is in the lobby, send an "alone" event.
     if (state.playerOrder.length === 1) {
-      io.to(socket.id).emit('waitingForPlayers', { message: "OH DEAR, SEEMS LIKE YOU ARE ONLY ONE IN THE LOBBY" });
+      socket.emit('alone', { message: "OH DEAR, SEEMS LIKE YOU ARE ONLY ONE IN THE LOBBY" });
     } else {
-      // More than one player: start turn if not already started.
-      if (!state.currentDrawer) {
-        state.currentDrawer = state.playerOrder[0];
-      }
-      let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
-      io.to(lobbyName).emit('turnStarted', { 
-        currentDrawer: state.currentDrawer, 
-        duration: DECISION_DURATION,
-        currentDrawerName: currentDrawerName
-      });
-      const options = getRandomObjects(3);
-      io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-      let timeLeft = DECISION_DURATION;
-      state.currentDecisionTimeLeft = timeLeft;
-      state.turnTimer = setInterval(() => {
-        timeLeft--;
-        state.currentDecisionTimeLeft = timeLeft;
-        io.to(lobbyName).emit('turnCountdown', timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(state.turnTimer);
-          state.turnTimer = null;
-          io.to(state.currentDrawer).emit('turnTimeout');
-          startNextTurn(lobbyName);
-        }
-      }, 1000);
+      // If two or more players are present, start the turn normally.
+      startNextTurn(lobbyName);
     }
   });
   
-  // Object selection
+  // --- Object selection ---
   socket.on('objectChosen', (objectChosen) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
@@ -244,7 +221,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Chat and guessing
+  // --- Chat (and guessing) ---
   socket.on('chatMessage', (message) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
@@ -285,7 +262,7 @@ io.on('connection', (socket) => {
     io.to(lobbyName).emit('chatMessage', chatData);
   });
   
-  // Drawing events
+  // --- Drawing events ---
   socket.on('drawing', (data) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;

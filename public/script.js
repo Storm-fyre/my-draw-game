@@ -112,14 +112,18 @@ function adjustLayoutForKeyboard(active) {
     isKeyboardActive = true;
     // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
+    // Canvas container becomes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
     canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
+    // Message box takes 25% of width, height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
+    // Hide tools section.
     toolsBar.style.display = 'none';
+    // Change chat input placeholder.
     chatInput.placeholder = "Type:";
     redrawStrokes();
   } else {
@@ -139,14 +143,18 @@ function resizeLayout() {
   const boxContainer = document.getElementById('boxContainer');
   const canvasContainer = document.getElementById('canvasContainer');
   const toolsBar = document.getElementById('toolsBar');
+
   const width = gameContainer.clientWidth;
+  // Canvas is a full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
+
   const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
   const totalHeight = gameContainer.clientHeight;
   const boxHeight = totalHeight - width - toolsHeight;
   boxContainer.style.height = boxHeight + "px";
+
   redrawStrokes();
   updateDashHint();
 }
@@ -217,7 +225,7 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (for 1-word and 2-word objects)
+// --- Dash hint update function --- (handles only 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
