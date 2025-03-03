@@ -36,7 +36,7 @@
       <!-- Dash hint for non-drawing players -->
       <div id="dashHint"></div>
       <canvas id="drawCanvas"></canvas>
-      <!-- Status bar inside canvas: drawing controls, chosen object and countdown timer -->
+      <!-- Status bar inside canvas container -->
       <div id="statusBar">
         <div id="drawControls">
           <button id="undoBtn">Undo</button>
@@ -46,18 +46,18 @@
         <div id="objectDisplay"></div>
         <div id="drawCountdown" class="drawCountdown"></div>
       </div>
-      <!-- Turn prompt overlay (used for object selection in decision phase) -->
+      <!-- Turn prompt overlay -->
       <div id="turnPrompt">
         <div id="turnMessage">
           <p id="promptText">Your turn! Choose an object:</p>
           <div id="turnOptions">
-            <!-- Three buttons will be dynamically inserted here -->
+            <!-- Options inserted dynamically -->
           </div>
           <div id="countdownDisplay">10</div>
         </div>
       </div>
     </div>
-    <!-- Tools bar section (moved out of canvas container) -->
+    <!-- Tools bar section (separate from canvas) -->
     <div id="toolsBar">
       <div id="brushThickness">
         <span>Thickness:</span>
@@ -99,6 +99,7 @@
         <!-- Chat view -->
         <div id="chatBox" class="boxView">
           <!-- Chat messages will be appended here -->
+          <div id="chatBottom"></div>
         </div>
         <!-- Players list view -->
         <div id="playerBox" class="boxView" style="display:none;">

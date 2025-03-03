@@ -18,7 +18,7 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
-// Auto-scroll flag for chat; default is true (latest messages are visible)
+// Auto-scroll flag for chat; default is true (we want latest messages to be visible)
 let autoScrollEnabled = true;
 
 // --- Modal Elements ---
@@ -48,7 +48,6 @@ joinBtn.addEventListener('click', () => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
           if (lobby.passcode === "") {
-            // Directly join if no passcode is required.
             btn.addEventListener('click', () => {
               socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
             });
@@ -78,13 +77,11 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
-  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
-  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -97,7 +94,6 @@ const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
-// Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   paths.forEach(stroke => {
@@ -108,7 +104,6 @@ function redrawStrokes() {
   }
 }
 
-// Dynamic layout: canvas remains square; bottom box adjusts accordingly.
 function resizeLayout() {
   const gameContainer = document.getElementById('gameContainer');
   const boxContainer = document.getElementById('boxContainer');
@@ -133,8 +128,7 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Ensure chat box is scrolled to the bottom by default.
-  const chatBox = document.getElementById('chatBox');
+  // Initially ensure the chat box shows the latest messages.
   chatBox.scrollTop = chatBox.scrollHeight;
 });
 
@@ -154,16 +148,14 @@ toggleBoxBtn.addEventListener('click', () => {
   isChatView = !isChatView;
 });
 
-// --- Auto-scroll logic for chat ---
-// When the user scrolls the chat box, check if they are near the bottom.
-chatBox.addEventListener('scroll', () => {
-  const threshold = 50; // pixels from bottom
-  if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < threshold) {
-    autoScrollEnabled = true;
-  } else {
-    autoScrollEnabled = false;
-  }
-});
+// Use an IntersectionObserver on the chatBottom element to set autoScrollEnabled.
+const chatBottom = document.getElementById('chatBottom');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    autoScrollEnabled = entry.isIntersecting;
+  });
+}, { root: chatBox, threshold: 1.0 });
+observer.observe(chatBottom);
 
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChat');
@@ -179,10 +171,9 @@ sendChatBtn.addEventListener('click', () => {
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
-  chatBox.appendChild(p);
-  // If auto-scroll is enabled, always scroll to the bottom.
+  chatBox.insertBefore(p, chatBottom); // insert above the bottom marker
   if(autoScrollEnabled) {
-    chatBox.scrollTop = chatBox.scrollHeight;
+    chatBottom.scrollIntoView({ behavior: "smooth" });
   }
 }
 
@@ -195,8 +186,7 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function ---
-// Now handling only 1-word and 2-word objects.
+// --- Dash hint update function --- (handles only 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
