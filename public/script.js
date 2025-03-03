@@ -18,9 +18,6 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
-// Auto-scroll flag for chat; default is true (we want to show the latest messages)
-let autoScrollEnabled = true;
-
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
@@ -39,6 +36,7 @@ joinBtn.addEventListener('click', () => {
   if(name) {
     nickname = name;
     nicknameModal.style.display = 'none';
+    // Fetch lobby list from the server
     fetch('/lobbies')
       .then(res => res.json())
       .then(data => {
@@ -65,6 +63,7 @@ joinBtn.addEventListener('click', () => {
   }
 });
 
+// Handle joining lobby after passcode entry
 joinLobbyBtn.addEventListener('click', () => {
   const lobbyName = selectedLobbyNameElem.getAttribute('data-lobby');
   const passcode = lobbyPasscodeInput.value.trim();
@@ -75,11 +74,13 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
+  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
+  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -126,7 +127,7 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Ensure chat box is scrolled to bottom on load.
+  // Always scroll chat box to bottom on load.
   chatBox.scrollTop = chatBox.scrollHeight;
 });
 
@@ -144,16 +145,6 @@ toggleBoxBtn.addEventListener('click', () => {
     playerBox.style.display = 'none';
   }
   isChatView = !isChatView;
-});
-
-// Auto-scroll logic: if user is within 50px of the bottom, enable auto-scroll.
-chatBox.addEventListener('scroll', () => {
-  const threshold = 50;
-  if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight <= threshold) {
-    autoScrollEnabled = true;
-  } else {
-    autoScrollEnabled = false;
-  }
 });
 
 const chatInput = document.getElementById('chatInput');
@@ -179,16 +170,15 @@ function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
   chatBox.appendChild(p);
-  
+
   // Enforce message limit: keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[0]);
   }
   
-  if(autoScrollEnabled) {
-    chatBox.scrollTop = chatBox.scrollHeight;
-  }
+  // Always scroll to bottom.
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function updatePlayerList(playersArr) {
@@ -510,14 +500,11 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
   }
 });
 
-// Adjust scroll when keyboard appears.
-// When the chat input gains focus, wait for 500ms and then force a scroll to the bottom if auto-scroll is enabled.
 chatInput.addEventListener('focus', () => {
   resizeLayout();
+  // Force scroll to bottom when input is focused.
   setTimeout(() => {
-    if(autoScrollEnabled) {
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
+    chatBox.scrollTop = chatBox.scrollHeight;
   }, 500);
 });
 chatInput.addEventListener('blur', () => {
