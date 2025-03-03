@@ -110,33 +110,30 @@ function adjustLayoutForKeyboard(active) {
     gameContainer.style.flexDirection = 'row';
     // Canvas takes 75% of width.
     canvasContainer.style.width = '75%';
-    // Set canvas to be square based on its container's width.
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
-    canvas.height = newWidth;
+    canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width and its height equals canvas height.
+    // Message box takes 25% of width, height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
     // Hide tools section.
     toolsBar.style.display = 'none';
+    // Change chat input placeholder.
+    chatInput.placeholder = "Type:";
   } else {
     isKeyboardActive = false;
     // Restore vertical layout.
     gameContainer.style.flexDirection = 'column';
-    // Restore canvas container to full width.
     canvasContainer.style.width = '100%';
-    // Show tools section.
     toolsBar.style.display = 'flex';
-    // Call normal resizeLayout to recalc dimensions.
     resizeLayout();
-    // Set message box width to auto (full width below canvas).
     boxContainer.style.width = '100%';
+    chatInput.placeholder = "Type your message...";
   }
 }
 
 function resizeLayout() {
-  // If keyboard is active, use adjustLayoutForKeyboard instead.
   if (isKeyboardActive) return;
   const gameContainer = document.getElementById('gameContainer');
   const boxContainer = document.getElementById('boxContainer');
@@ -144,7 +141,7 @@ function resizeLayout() {
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
-  // Canvas is square (full width)
+  // Canvas is a full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
@@ -166,7 +163,6 @@ window.addEventListener('orientationchange', () => {
 });
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Ensure chat box is scrolled to bottom on load.
   chatBox.scrollTop = chatBox.scrollHeight;
 });
 
@@ -200,11 +196,12 @@ chatInput.addEventListener('keydown', (e) => {
   }
 });
 
-// When chat input is focused, assume keyboard is active.
+// When chat input is focused, adjust layout for keyboard and change placeholder.
 chatInput.addEventListener('focus', () => {
   adjustLayoutForKeyboard(true);
 });
-// When chat input loses focus, revert layout.
+
+// When chat input is blurred, revert layout and placeholder.
 chatInput.addEventListener('blur', () => {
   adjustLayoutForKeyboard(false);
 });
@@ -218,7 +215,7 @@ function addChatMessage(data) {
   } else {
     chatBox.appendChild(p);
   }
-  // Enforce message limit: keep only 30 messages (remove from bottom)
+  // Enforce message limit: keep only 30 messages (remove from bottom).
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -486,8 +483,8 @@ function drawStroke(data, emitLocal) {
   for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
-    const x_next = data.path[i+1].x * canvas.width;
-    const y_next = data.path[i+1].y * canvas.height;
+    const x_next = data.path[i + 1].x * canvas.width;
+    const y_next = data.path[i + 1].y * canvas.height;
     const midX = (x_i + x_next) / 2;
     const midY = (y_i + y_next) / 2;
     ctx.quadraticCurveTo(x_i, y_i, midX, midY);
