@@ -5,7 +5,8 @@ let isDrawing = false;
 let currentPath = [];
 let paths = []; // stored complete strokes
 let currentColor = "#000000";
-let currentThickness = 2; // default is now 2px
+// Default thickness is now 2px.
+let currentThickness = 2;
 let isMyTurn = false;
 
 // For non-drawing players: store current remote stroke
@@ -76,14 +77,6 @@ joinLobbyBtn.addEventListener('click', () => {
   }
 });
 
-// Listen for autoSetNickname event from server
-socket.on('autoSetNickname', (data) => {
-  // Automatically use stored nickname and hide nickname modal.
-  socket.emit('setNickname', data.nickname);
-  nickname = data.nickname;
-  nicknameModal.style.display = 'none';
-});
-
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
   socket.emit('setNickname', nickname);
@@ -109,7 +102,7 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Layout adjustment when keyboard is active.
+// Adjust layout when keyboard is active.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -119,18 +112,14 @@ function adjustLayoutForKeyboard(active) {
     isKeyboardActive = true;
     // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
-    // Canvas container becomes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
     canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width, height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
-    // Hide tools section.
     toolsBar.style.display = 'none';
-    // Change chat input placeholder.
     chatInput.placeholder = "Type:";
     redrawStrokes();
   } else {
@@ -150,18 +139,14 @@ function resizeLayout() {
   const boxContainer = document.getElementById('boxContainer');
   const canvasContainer = document.getElementById('canvasContainer');
   const toolsBar = document.getElementById('toolsBar');
-
   const width = gameContainer.clientWidth;
-  // Canvas is full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
-
   const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
   const totalHeight = gameContainer.clientHeight;
   const boxHeight = totalHeight - width - toolsHeight;
   boxContainer.style.height = boxHeight + "px";
-
   redrawStrokes();
   updateDashHint();
 }
@@ -189,6 +174,8 @@ toggleBoxBtn.addEventListener('click', () => {
   isChatView = !isChatView;
 });
 
+const chatInput = document.getElementById('chatInput');
+
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -205,19 +192,16 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  // If nickname is non-empty, add colon; otherwise, display only the message.
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
     p.textContent = data.message;
   }
-  // Insert new message at the top.
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
-  // Keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -279,8 +263,8 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  // For non-drawing players, if a lobbyMessage is provided, the client can show it.
   if (data.decisionTimeLeft !== null && data.currentDrawer) {
+    turnPrompt.style.display = 'flex';
     // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
@@ -493,8 +477,8 @@ function drawStroke(data, emitLocal) {
   for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
-    const x_next = data.path[i + 1].x * canvas.width;
-    const y_next = data.path[i + 1].y * canvas.height;
+    const x_next = data.path[i+1].x * canvas.width;
+    const y_next = data.path[i+1].y * canvas.height;
     const midX = (x_i + x_next) / 2;
     const midY = (y_i + y_next) / 2;
     ctx.quadraticCurveTo(x_i, y_i, midX, midY);
