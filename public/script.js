@@ -112,13 +112,12 @@ function adjustLayoutForKeyboard(active) {
     isKeyboardActive = true;
     // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
-    // Canvas container becomes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
     canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width, height equals canvas height.
+    // Message box takes 25% of width and height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
     // Hide tools section.
@@ -145,7 +144,6 @@ function resizeLayout() {
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
-  // Canvas is a full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
@@ -200,16 +198,19 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
+  // If nickname is non-empty, display with colon; otherwise, show only the message.
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
     p.textContent = data.message;
   }
+  // Insert new message at the top.
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
+  // Keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -485,8 +486,8 @@ function drawStroke(data, emitLocal) {
   for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
-    const x_next = data.path[i+1].x * canvas.width;
-    const y_next = data.path[i+1].y * canvas.height;
+    const x_next = data.path[i + 1].x * canvas.width;
+    const y_next = data.path[i + 1].y * canvas.height;
     const midX = (x_i + x_next) / 2;
     const midY = (y_i + y_next) / 2;
     ctx.quadraticCurveTo(x_i, y_i, midX, midY);

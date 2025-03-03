@@ -182,12 +182,29 @@ io.on('connection', (socket) => {
       let player = state.players[id];
       return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
     }));
-    // If only one player is in the lobby, send an "alone" event.
-    if (state.playerOrder.length === 1) {
-      socket.emit('alone', { message: "OH DEAR, SEEMS LIKE YOU ARE ONLY ONE IN THE LOBBY" });
-    } else {
-      // If two or more players are present, start the turn normally.
-      startNextTurn(lobbyName);
+    if (!state.currentDrawer) {
+      state.currentDrawer = socket.id;
+      let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
+      io.to(lobbyName).emit('turnStarted', { 
+        currentDrawer: state.currentDrawer, 
+        duration: DECISION_DURATION,
+        currentDrawerName: currentDrawerName
+      });
+      const options = getRandomObjects(3);
+      io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
+      let timeLeft = DECISION_DURATION;
+      state.currentDecisionTimeLeft = timeLeft;
+      state.turnTimer = setInterval(() => {
+        timeLeft--;
+        state.currentDecisionTimeLeft = timeLeft;
+        io.to(lobbyName).emit('turnCountdown', timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(state.turnTimer);
+          state.turnTimer = null;
+          io.to(state.currentDrawer).emit('turnTimeout');
+          startNextTurn(lobbyName);
+        }
+      }, 1000);
     }
   });
   
