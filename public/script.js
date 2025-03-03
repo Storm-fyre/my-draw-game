@@ -3,13 +3,13 @@ const socket = io();
 let nickname = "";
 let isDrawing = false;
 let currentPath = [];
-let paths = []; // stored complete strokes (for redrawing)
+let paths = []; // stored complete strokes
 let currentColor = "#000000";
 // Default thickness is now 2px.
 let currentThickness = 2;
 let isMyTurn = false;
 
-// For non-drawing players: store the current remote stroke (in progress)
+// For non-drawing players: store current remote stroke
 let currentRemoteStroke = null;
 
 // For dash hint (object reveal)
@@ -102,7 +102,7 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Layout adjustment when keyboard is active.
+// Adjust layout when keyboard is active.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -112,14 +112,12 @@ function adjustLayoutForKeyboard(active) {
     isKeyboardActive = true;
     // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
-    // Canvas container becomes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
-    // Preserve drawing continuity: update dimensions and redraw strokes.
     canvas.width = newWidth;
-    canvas.height = newWidth; // square canvas remains
+    canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width, height equal to canvas height.
+    // Message box takes 25% of width and height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
     // Hide tools section.
@@ -129,7 +127,6 @@ function adjustLayoutForKeyboard(active) {
     redrawStrokes();
   } else {
     isKeyboardActive = false;
-    // Restore vertical layout.
     gameContainer.style.flexDirection = 'column';
     canvasContainer.style.width = '100%';
     toolsBar.style.display = 'flex';
@@ -139,7 +136,6 @@ function adjustLayoutForKeyboard(active) {
   }
 }
 
-// Normal layout: canvas is full-width square.
 function resizeLayout() {
   if (isKeyboardActive) return;
   const gameContainer = document.getElementById('gameContainer');
@@ -161,12 +157,8 @@ function resizeLayout() {
   updateDashHint();
 }
 
-window.addEventListener('resize', () => {
-  if (!isKeyboardActive) resizeLayout();
-});
-window.addEventListener('orientationchange', () => {
-  if (!isKeyboardActive) resizeLayout();
-});
+window.addEventListener('resize', () => { if (!isKeyboardActive) resizeLayout(); });
+window.addEventListener('orientationchange', () => { if (!isKeyboardActive) resizeLayout(); });
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
   chatBox.scrollTop = chatBox.scrollHeight;
@@ -190,7 +182,6 @@ toggleBoxBtn.addEventListener('click', () => {
 
 const chatInput = document.getElementById('chatInput');
 
-// Send message on Enter key.
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -202,25 +193,24 @@ chatInput.addEventListener('keydown', (e) => {
   }
 });
 
-// When chat input is focused, adjust layout and change placeholder.
-chatInput.addEventListener('focus', () => {
-  adjustLayoutForKeyboard(true);
-});
-// When chat input is blurred, revert layout.
-chatInput.addEventListener('blur', () => {
-  adjustLayoutForKeyboard(false);
-});
+chatInput.addEventListener('focus', () => { adjustLayoutForKeyboard(true); });
+chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  p.textContent = `${data.nickname}: ${data.message}`;
+  // If nickname is non-empty, display with colon; otherwise, show only the message.
+  if (data.nickname && data.nickname.trim() !== "") {
+    p.textContent = `${data.nickname}: ${data.message}`;
+  } else {
+    p.textContent = data.message;
+  }
   // Insert new message at the top.
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
-  // Enforce message limit: keep only the last 30 messages (remove from bottom).
+  // Keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -272,7 +262,6 @@ function updateDashHint() {
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   }
-  // Slightly increased spacing.
   dashHintDiv.textContent = hintWords.join("    ");
 }
 
@@ -285,19 +274,15 @@ socket.on('init', (data) => {
   }
   if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
-    promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
+    // For non-drawing players, show only the uppercase name and countdown.
+    promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     countdownDisplay.textContent = data.decisionTimeLeft;
   }
 });
 
-socket.on('chatMessage', (data) => {
-  addChatMessage(data);
-});
-
-socket.on('updatePlayers', (playersArr) => {
-  updatePlayerList(playersArr);
-});
+socket.on('chatMessage', (data) => { addChatMessage(data); });
+socket.on('updatePlayers', (playersArr) => { updatePlayerList(playersArr); });
 
 socket.on('drawing', (data) => {
   if (!isMyTurn) {
@@ -320,9 +305,7 @@ socket.on('clearCanvas', () => {
   currentRemoteStroke = null;
 });
 
-socket.on('undo', () => {
-  undoLastStroke();
-});
+socket.on('undo', () => { undoLastStroke(); });
 
 // Turn and object selection events
 const turnPrompt = document.getElementById('turnPrompt');
@@ -338,9 +321,7 @@ socket.on('turnStarted', (data) => {
     if (currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
-      // Increase font size slightly.
       objectDisplayElem.style.fontSize = "14px";
-      // Set a timeout to clear the object display after 70 seconds.
       if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
       drawPhaseObjectTimer = setTimeout(() => {
         objectDisplayElem.style.display = 'none';
@@ -350,7 +331,8 @@ socket.on('turnStarted', (data) => {
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'flex';
-    promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
+    // For non-drawing players, show only the uppercase name and countdown.
+    promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
@@ -499,14 +481,13 @@ function drawStroke(data, emitLocal) {
   ctx.lineWidth = data.thickness;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-
   ctx.beginPath();
   ctx.moveTo(data.path[0].x * canvas.width, data.path[0].y * canvas.height);
   for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
-    const x_next = data.path[i+1].x * canvas.width;
-    const y_next = data.path[i+1].y * canvas.height;
+    const x_next = data.path[i + 1].x * canvas.width;
+    const y_next = data.path[i + 1].y * canvas.height;
     const midX = (x_i + x_next) / 2;
     const midY = (y_i + y_next) / 2;
     ctx.quadraticCurveTo(x_i, y_i, midX, midY);
@@ -564,9 +545,5 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
   }
 });
 
-chatInput.addEventListener('focus', () => {
-  adjustLayoutForKeyboard(true);
-});
-chatInput.addEventListener('blur', () => {
-  adjustLayoutForKeyboard(false);
-});
+chatInput.addEventListener('focus', () => { adjustLayoutForKeyboard(true); });
+chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });

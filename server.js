@@ -98,7 +98,7 @@ function startNextTurn(lobbyName) {
   state.currentObject = null;
   state.guessedCorrectly = {};
   
-  // Rotate turn based on arrival order (playerOrder array)
+  // Rotate turn based on arrival order
   if (state.playerOrder.length === 0) {
     state.currentDrawer = null;
     return;
@@ -114,7 +114,7 @@ function startNextTurn(lobbyName) {
     }
   }
   
-  // Only send currentDrawerName in uppercase (no rank info)
+  // Send only the uppercase name (no rank info)
   let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
@@ -165,7 +165,7 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // Broadcast join notification in full uppercase without "SYSTEM:" prefix.
+    // Broadcast join notification in full uppercase without colon.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
     socket.emit('init', {
       players: state.playerOrder.map(id => {
@@ -250,11 +250,9 @@ io.on('connection', (socket) => {
         const sim = similarity(guess, answer);
         if (sim >= 60) {
           state.guessedCorrectly[socket.id] = true;
-          // Multiply points by 10.
           const points = Math.ceil((state.currentDrawTimeLeft + 1) / 10) * 10;
           state.players[socket.id].score += points;
           const nickname = state.players[socket.id].nickname;
-          // System message in uppercase without "SYSTEM:" prefix.
           const correctMsg = `${nickname.toUpperCase()} GOT ${points} POINTS`;
           io.to(lobbyName).emit('chatMessage', { nickname: "", message: correctMsg });
           io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
