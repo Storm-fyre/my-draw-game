@@ -414,9 +414,7 @@ socket.on('drawPhaseTimeout', () => {
   if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
 });
 
-// New event handler for change game voting:
-// When the server sends "changeGameVoting", display buttons (one per cluster heading)
-// so that players can vote by clicking a button.
+// New event handler for change game voting (unchanged except duration now is 10 sec)
 socket.on('changeGameVoting', (data) => {
   turnPrompt.style.display = 'flex';
   promptText.textContent = "Vote for a cluster:";
@@ -433,10 +431,21 @@ socket.on('changeGameVoting', (data) => {
   countdownDisplay.textContent = data.duration;
 });
 
-// When the voting period ends, display the chosen cluster in the chat.
-socket.on('changeGameResult', (data) => {
-  addChatMessage({ nickname: "", message: `Game changed to cluster: ${data.chosenCluster.toUpperCase()}` });
-  turnPrompt.style.display = 'none';
+// New handler to show the voting result with individual votes and result message.
+socket.on('changeGameVoteResult', (data) => {
+  turnPrompt.style.display = 'flex';
+  let voteText = "Votes:\n";
+  for (let player in data.playerVotes) {
+    voteText += `${player}: ${data.playerVotes[player]}\n`;
+  }
+  voteText += data.resultMessage;
+  promptText.textContent = voteText;
+  turnOptionsDiv.innerHTML = '';
+});
+
+// Handler for the result countdown
+socket.on('changeGameResultCountdown', (timeLeft) => {
+  countdownDisplay.textContent = timeLeft;
 });
 
 function getNormalizedPos(e) {

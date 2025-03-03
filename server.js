@@ -158,59 +158,76 @@ function startNextTurn(lobbyName) {
   }, 1000);
 }
 
-// Start the change game voting phase by sending cluster choices to all players and starting a 15‑second timer.
+// Start the change game voting phase by sending cluster choices to all players and starting a 10‑second timer.
 function startChangeGameVoting(lobbyName) {
   const state = activeLobbies[lobbyName];
   if (!state) return;
   if (state.changeGameVoting) return;
   state.changeGameVoting = true;
   state.clusterVotes = {};
-  // Clear any ongoing turn timer to pause the current turn.
+  // Pause the current turn
   if (state.turnTimer) {
     clearInterval(state.turnTimer);
     state.turnTimer = null;
   }
   const clusterHeadings = objects.clusters.map(cluster => cluster.heading);
-  io.to(lobbyName).emit('changeGameVoting', { clusterHeadings, duration: 15 });
+  io.to(lobbyName).emit('changeGameVoting', { clusterHeadings, duration: 10 });
   state.changeGameTimer = setTimeout(() => {
       finishChangeGameVoting(lobbyName);
-  }, 15000);
+  }, 10000);
 }
 
-// Tally votes after the 15‑second period, set the new current cluster, broadcast the result, and restart the turn.
+// Tally votes after the 10‑second period, send vote details and result message,
+// then start a 10‑second countdown before resuming play.
 function finishChangeGameVoting(lobbyName) {
-   const state = activeLobbies[lobbyName];
-   if (!state || !state.changeGameVoting) return;
-   clearTimeout(state.changeGameTimer);
-   state.changeGameVoting = false;
-   let voteCounts = {};
-   for (let socketId in state.clusterVotes) {
-       const vote = state.clusterVotes[socketId];
-       voteCounts[vote] = (voteCounts[vote] || 0) + 1;
-   }
-   let maxVotes = 0;
-   let winners = [];
-   for (let cluster in voteCounts) {
-       if (voteCounts[cluster] > maxVotes) {
-           maxVotes = voteCounts[cluster];
-           winners = [cluster];
-       } else if (voteCounts[cluster] === maxVotes) {
-           winners.push(cluster);
-       }
-   }
-   let chosenCluster;
-   if (winners.length === 1) {
-       chosenCluster = winners[0];
-   } else if (winners.length > 1) {
-       chosenCluster = winners[Math.floor(Math.random() * winners.length)];
-   }
-   // If no votes were cast, default to the first cluster.
-   if (!chosenCluster && objects.clusters.length > 0) {
-       chosenCluster = objects.clusters[0].heading;
-   }
-   state.currentCluster = chosenCluster;
-   io.to(lobbyName).emit('changeGameResult', { chosenCluster });
-   startNextTurn(lobbyName);
+  const state = activeLobbies[lobbyName];
+  if (!state || !state.changeGameVoting) return;
+  clearTimeout(state.changeGameTimer);
+  state.changeGameVoting = false;
+  let voteCounts = {};
+  let playerVotes = {};
+  for (let socketId in state.clusterVotes) {
+      const vote = state.clusterVotes[socketId];
+      voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+      if (state.players[socketId]) {
+        playerVotes[state.players[socketId].nickname] = vote;
+      }
+  }
+  let maxVotes = 0;
+  let winners = [];
+  for (let cluster in voteCounts) {
+      if (voteCounts[cluster] > maxVotes) {
+          maxVotes = voteCounts[cluster];
+          winners = [cluster];
+      } else if (voteCounts[cluster] === maxVotes) {
+          winners.push(cluster);
+      }
+  }
+  let resultMessage = "";
+  let chosenCluster;
+  if (winners.length === 1) {
+      chosenCluster = winners[0];
+      resultMessage = `${chosenCluster.toUpperCase()} CLUSTER WON THE VOTE`;
+  } else {
+      resultMessage = "VOTE IS TIED, STATUS QUO CONTINUES";
+      chosenCluster = state.currentCluster || (objects.clusters[0] && objects.clusters[0].heading);
+  }
+  // Emit the vote results including how each player voted
+  io.to(lobbyName).emit('changeGameVoteResult', { playerVotes, resultMessage });
+  
+  // Start a 10-second countdown before resuming play.
+  let countdown = 10;
+  io.to(lobbyName).emit('changeGameResultCountdown', countdown);
+  state.changeGameResultTimer = setInterval(() => {
+    countdown--;
+    io.to(lobbyName).emit('changeGameResultCountdown', countdown);
+    if (countdown <= 0) {
+      clearInterval(state.changeGameResultTimer);
+      state.changeGameResultTimer = null;
+      state.currentCluster = chosenCluster;
+      startNextTurn(lobbyName);
+    }
+  }, 1000);
 }
 
 io.on('connection', (socket) => {
