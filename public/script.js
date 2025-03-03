@@ -18,6 +18,9 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
+// New flag to control auto-scroll for chat
+let autoScrollEnabled = true;
+
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
@@ -36,6 +39,7 @@ joinBtn.addEventListener('click', () => {
   if(name) {
     nickname = name;
     nicknameModal.style.display = 'none';
+    // Fetch lobby list from the server
     fetch('/lobbies')
       .then(res => res.json())
       .then(data => {
@@ -44,6 +48,7 @@ joinBtn.addEventListener('click', () => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
           if (lobby.passcode === "") {
+            // Directly join if no passcode is required.
             btn.addEventListener('click', () => {
               socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
             });
@@ -73,11 +78,13 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
+  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
+  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -90,6 +97,7 @@ const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
+// Function to redraw complete strokes and current remote stroke (if any)
 function redrawStrokes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   paths.forEach(stroke => {
@@ -100,6 +108,7 @@ function redrawStrokes() {
   }
 }
 
+// Dynamic layout: canvas remains square; bottom box adjusts accordingly.
 function resizeLayout() {
   const gameContainer = document.getElementById('gameContainer');
   const boxContainer = document.getElementById('boxContainer');
@@ -143,6 +152,17 @@ toggleBoxBtn.addEventListener('click', () => {
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChat');
 
+// --- Auto-scroll logic for chat box ---
+// Auto-scroll will remain active only if the user is scrolled to the bottom (with a tolerance)
+chatBox.addEventListener('scroll', () => {
+  const threshold = 20; // pixels
+  if(chatBox.scrollTop + chatBox.clientHeight < chatBox.scrollHeight - threshold) {
+    autoScrollEnabled = false;
+  } else {
+    autoScrollEnabled = true;
+  }
+});
+
 sendChatBtn.addEventListener('click', () => {
   const msg = chatInput.value.trim();
   if(msg) {
@@ -155,7 +175,10 @@ function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
   chatBox.appendChild(p);
-  chatBox.scrollTop = chatBox.scrollHeight;
+  // Auto-scroll only if user is at (or very near) the bottom.
+  if(autoScrollEnabled) {
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
 }
 
 function updatePlayerList(playersArr) {
@@ -167,7 +190,8 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (only 1-word and 2-word objects)
+// --- Dash hint update function ---
+// Now handling only 1-word and 2-word objects.
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -203,9 +227,10 @@ function updateDashHint() {
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   }
-  dashHintDiv.textContent = hintWords.join("    ");
+  dashHintDiv.textContent = hintWords.join("    "); // clear gap between words
 }
 
+// --- Socket events ---
 socket.on('init', (data) => {
   updatePlayerList(data.players);
   if(data.canvasStrokes) {
