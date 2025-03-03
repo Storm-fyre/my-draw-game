@@ -169,6 +169,8 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
+    // Broadcast join message.
+    io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname} joined` });
     // For new joiners, send empty chat history and current canvas strokes so they see in-progress drawing.
     socket.emit('init', {
       players: state.playerOrder.map(id => {
@@ -177,7 +179,6 @@ io.on('connection', (socket) => {
       }),
       chatMessages: [],
       canvasStrokes: state.canvasStrokes,
-      // Include decision phase countdown and current drawer info if still choosing:
       decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
       currentDrawer: state.currentDrawer || null,
       currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname : null,
@@ -200,7 +201,7 @@ io.on('connection', (socket) => {
       const options = getRandomObjects(3);
       io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
       let timeLeft = DECISION_DURATION;
-      state.currentDecisionTimeLeft = timeLeft;  // set decision countdown tracking
+      state.currentDecisionTimeLeft = timeLeft;  
       state.turnTimer = setInterval(() => {
         timeLeft--;
         state.currentDecisionTimeLeft = timeLeft;
@@ -228,7 +229,6 @@ io.on('connection', (socket) => {
       state.currentObject = objectChosen;
       state.guessedCorrectly = {};
       state.currentDrawTimeLeft = DRAW_DURATION;
-      // Broadcast the chosen object for dash hint display (words not visible to the drawer)
       io.to(lobbyName).emit('objectChosenBroadcast', { object: state.currentObject });
       io.to(lobbyName).emit('drawPhaseStarted', { currentDrawer: state.currentDrawer, duration: DRAW_DURATION });
       let timeLeft = DRAW_DURATION;
@@ -258,16 +258,17 @@ io.on('connection', (socket) => {
         const sim = similarity(guess, answer);
         if (sim >= 60) {
           state.guessedCorrectly[socket.id] = true;
-          const points = Math.ceil((state.currentDrawTimeLeft + 1) / 10);
+          // Multiply points by 10.
+          const points = Math.ceil((state.currentDrawTimeLeft + 1) / 10) * 10;
           state.players[socket.id].score += points;
           const nickname = state.players[socket.id].nickname;
-          const correctMsg = `${nickname} guessed correctly and earned ${points} points!`;
-          io.to(lobbyName).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
+          // Acknowledge without "SYSTEM:" prefix.
+          const correctMsg = `${nickname} got ${points} points`;
+          io.to(lobbyName).emit('chatMessage', { nickname: "", message: correctMsg });
           io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
             let player = state.players[id];
             return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
           }));
-          // If all non-drawing players have guessed, end the turn.
           if (Object.keys(state.guessedCorrectly).length >= (Object.keys(state.players).length - 1)) {
             if (state.turnTimer) {
               clearInterval(state.turnTimer);
