@@ -30,6 +30,7 @@ function createLobbyState() {
     guessedCorrectly: {},
     turnTimer: null,
     currentDrawTimeLeft: 0
+    // We'll add currentDecisionTimeLeft dynamically when needed
   };
 }
 
@@ -115,6 +116,7 @@ function startNextTurn(lobbyName) {
   
   let currentDrawerRank = state.playerOrder.indexOf(state.currentDrawer) + 1;
   let currentDrawerName = state.players[state.currentDrawer].nickname;
+  // Broadcast turn-start along with the drawer's rank and name
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
     duration: DECISION_DURATION,
@@ -123,11 +125,14 @@ function startNextTurn(lobbyName) {
   });
   
   const options = getRandomObjects(3);
+  // Send object selection options privately to the drawer
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
   let timeLeft = DECISION_DURATION;
+  state.currentDecisionTimeLeft = timeLeft; // set decision countdown tracking
   state.turnTimer = setInterval(() => {
     timeLeft--;
+    state.currentDecisionTimeLeft = timeLeft;
     io.to(lobbyName).emit('turnCountdown', timeLeft);
     if (timeLeft <= 0) {
       clearInterval(state.turnTimer);
@@ -144,6 +149,7 @@ io.on('connection', (socket) => {
   // --- Lobby joining ---
   socket.on('joinLobby', (data) => {
     const lobbyEntry = lobbyInfo.find(l => l.name === data.lobbyName);
+    // If passcode exists and does not match, reject; if passcode is blank, allow directly.
     if (!lobbyEntry || (lobbyEntry.passcode && lobbyEntry.passcode !== data.passcode)) {
       socket.emit('lobbyError', { message: 'Invalid lobby or passcode.' });
       return;
@@ -163,15 +169,19 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // Emit join notification
-    io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname} joined the game` });
+    // For new joiners, send empty chat history and current canvas strokes so they see in-progress drawing.
     socket.emit('init', {
       players: state.playerOrder.map(id => {
         let player = state.players[id];
         return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
       }),
       chatMessages: [],
-      canvasStrokes: state.canvasStrokes
+      canvasStrokes: state.canvasStrokes,
+      // Include decision phase countdown and current drawer info if still choosing:
+      decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
+      currentDrawer: state.currentDrawer || null,
+      currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname : null,
+      currentDrawerRank: state.currentDrawer ? state.playerOrder.indexOf(state.currentDrawer) + 1 : null
     });
     io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
       let player = state.players[id];
@@ -190,13 +200,46 @@ io.on('connection', (socket) => {
       const options = getRandomObjects(3);
       io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
       let timeLeft = DECISION_DURATION;
+      state.currentDecisionTimeLeft = timeLeft;  // set decision countdown tracking
       state.turnTimer = setInterval(() => {
         timeLeft--;
+        state.currentDecisionTimeLeft = timeLeft;
         io.to(lobbyName).emit('turnCountdown', timeLeft);
         if (timeLeft <= 0) {
           clearInterval(state.turnTimer);
           state.turnTimer = null;
           io.to(state.currentDrawer).emit('turnTimeout');
+          startNextTurn(lobbyName);
+        }
+      }, 1000);
+    }
+  });
+  
+  // --- Object selection ---
+  socket.on('objectChosen', (objectChosen) => {
+    const lobbyName = socket.lobby;
+    if (!lobbyName || !activeLobbies[lobbyName]) return;
+    const state = activeLobbies[lobbyName];
+    if (socket.id === state.currentDrawer && !state.currentObject) {
+      if (state.turnTimer) {
+        clearInterval(state.turnTimer);
+        state.turnTimer = null;
+      }
+      state.currentObject = objectChosen;
+      state.guessedCorrectly = {};
+      state.currentDrawTimeLeft = DRAW_DURATION;
+      // Broadcast the chosen object for dash hint display (words not visible to the drawer)
+      io.to(lobbyName).emit('objectChosenBroadcast', { object: state.currentObject });
+      io.to(lobbyName).emit('drawPhaseStarted', { currentDrawer: state.currentDrawer, duration: DRAW_DURATION });
+      let timeLeft = DRAW_DURATION;
+      state.turnTimer = setInterval(() => {
+        timeLeft--;
+        state.currentDrawTimeLeft = timeLeft;
+        io.to(lobbyName).emit('drawPhaseCountdown', timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(state.turnTimer);
+          state.turnTimer = null;
+          io.to(state.currentDrawer).emit('drawPhaseTimeout');
           startNextTurn(lobbyName);
         }
       }, 1000);
@@ -215,17 +258,16 @@ io.on('connection', (socket) => {
         const sim = similarity(guess, answer);
         if (sim >= 60) {
           state.guessedCorrectly[socket.id] = true;
-          // Multiply the points by 10.
-          const points = Math.ceil((state.currentDrawTimeLeft + 1) / 10) * 10;
+          const points = Math.ceil((state.currentDrawTimeLeft + 1) / 10);
           state.players[socket.id].score += points;
           const nickname = state.players[socket.id].nickname;
           const correctMsg = `${nickname} guessed correctly and earned ${points} points!`;
-          // Broadcast the correct answer message without a SYSTEM prefix.
-          io.to(lobbyName).emit('chatMessage', { nickname: "", message: correctMsg });
+          io.to(lobbyName).emit('chatMessage', { nickname: "SYSTEM", message: correctMsg });
           io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
             let player = state.players[id];
             return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
           }));
+          // If all non-drawing players have guessed, end the turn.
           if (Object.keys(state.guessedCorrectly).length >= (Object.keys(state.players).length - 1)) {
             if (state.turnTimer) {
               clearInterval(state.turnTimer);
