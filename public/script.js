@@ -102,7 +102,6 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Adjust layout when keyboard is active.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -110,19 +109,15 @@ function adjustLayoutForKeyboard(active) {
   const toolsBar = document.getElementById('toolsBar');
   if (active) {
     isKeyboardActive = true;
-    // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
-    canvas.height = newWidth; // square canvas
+    canvas.height = newWidth;
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width and height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
-    // Hide tools section.
     toolsBar.style.display = 'none';
-    // Change chat input placeholder.
     chatInput.placeholder = "Type:";
     redrawStrokes();
   } else {
@@ -164,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
   chatBox.scrollTop = chatBox.scrollHeight;
 });
 
-// --- Chat and Player Box ---
 const toggleBoxBtn = document.getElementById('toggleBox');
 const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
@@ -198,19 +192,16 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  // If nickname is non-empty, display with colon; otherwise, show only the message.
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
     p.textContent = data.message;
   }
-  // Insert new message at the top.
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
-  // Keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -226,7 +217,6 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (handles only 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -265,7 +255,6 @@ function updateDashHint() {
   dashHintDiv.textContent = hintWords.join("    ");
 }
 
-// --- Socket events ---
 socket.on('init', (data) => {
   updatePlayerList(data.players);
   if (data.canvasStrokes) {
@@ -274,7 +263,6 @@ socket.on('init', (data) => {
   }
   if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     countdownDisplay.textContent = data.decisionTimeLeft;
@@ -331,7 +319,6 @@ socket.on('turnStarted', (data) => {
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     objectDisplayElem.style.display = 'none';
@@ -425,6 +412,31 @@ socket.on('drawPhaseTimeout', () => {
   objectDisplayElem.style.display = 'none';
   objectDisplayElem.textContent = '';
   if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
+});
+
+// New event handler for change game voting:
+// When the server sends "changeGameVoting", display buttons (one per cluster heading)
+// so that players can vote by clicking a button.
+socket.on('changeGameVoting', (data) => {
+  turnPrompt.style.display = 'flex';
+  promptText.textContent = "Vote for a cluster:";
+  turnOptionsDiv.innerHTML = '';
+  data.clusterHeadings.forEach(heading => {
+    const btn = document.createElement('button');
+    btn.textContent = heading;
+    btn.addEventListener('click', () => {
+      socket.emit('clusterVote', heading);
+      Array.from(turnOptionsDiv.children).forEach(child => child.disabled = true);
+    });
+    turnOptionsDiv.appendChild(btn);
+  });
+  countdownDisplay.textContent = data.duration;
+});
+
+// When the voting period ends, display the chosen cluster in the chat.
+socket.on('changeGameResult', (data) => {
+  addChatMessage({ nickname: "", message: `Game changed to cluster: ${data.chosenCluster.toUpperCase()}` });
+  turnPrompt.style.display = 'none';
 });
 
 function getNormalizedPos(e) {
