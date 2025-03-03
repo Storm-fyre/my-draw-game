@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const objects = require('./objects.json');       // drawing objects list, now with clusters
+const objects = require('./objects.json');       // drawing objects list
 const lobbyInfo = require('./lobbies.json');       // available lobbies and passcodes
 
 const app = express();
@@ -29,12 +29,8 @@ function createLobbyState() {
     currentObject: null,
     guessedCorrectly: {},
     turnTimer: null,
-    currentDrawTimeLeft: 0,
-    // Fields for the new change game feature
-    changeGameVotes: {},
-    changeGameVoting: false,
-    clusterVotes: {},
-    currentCluster: null
+    currentDrawTimeLeft: 0
+    // We'll add currentDecisionTimeLeft dynamically when needed
   };
 }
 
@@ -74,25 +70,14 @@ function similarity(str1, str2) {
   return ((1 - distance / maxLen) * 100);
 }
 
-// Randomly select n objects from the list (without duplicates) using the chosen cluster.
-// If a cluster is set then only that cluster’s objects are used; otherwise, default to the first cluster.
-function getRandomObjects(n, clusterHeading) {
-  let availableObjects = [];
-  if (clusterHeading) {
-    const cluster = objects.clusters.find(c => c.heading === clusterHeading);
-    if (cluster) {
-      availableObjects = cluster.objects.slice();
-    }
-  } else {
-    if (objects.clusters && objects.clusters.length > 0) {
-      availableObjects = objects.clusters[0].objects.slice();
-    }
-  }
-  for (let i = availableObjects.length - 1; i > 0; i--) {
+// Randomly select n objects from the list (without duplicates)
+function getRandomObjects(n) {
+  let shuffled = objects.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [availableObjects[i], availableObjects[j]] = [availableObjects[j], availableObjects[i]];
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return availableObjects.slice(0, n);
+  return shuffled.slice(0, n);
 }
 
 const DECISION_DURATION = 10;
@@ -113,10 +98,6 @@ function startNextTurn(lobbyName) {
   state.currentObject = null;
   state.guessedCorrectly = {};
   
-  // Reset any change game votes
-  state.changeGameVotes = {};
-  state.clusterVotes = {};
-
   // Rotate turn based on arrival order
   if (state.playerOrder.length === 0) {
     state.currentDrawer = null;
@@ -133,6 +114,7 @@ function startNextTurn(lobbyName) {
     }
   }
   
+  // Send only the uppercase name (no rank info)
   let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
@@ -140,7 +122,7 @@ function startNextTurn(lobbyName) {
     currentDrawerName: currentDrawerName
   });
   
-  const options = getRandomObjects(3, state.currentCluster);
+  const options = getRandomObjects(3);
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
   let timeLeft = DECISION_DURATION;
@@ -153,78 +135,6 @@ function startNextTurn(lobbyName) {
       clearInterval(state.turnTimer);
       state.turnTimer = null;
       io.to(state.currentDrawer).emit('turnTimeout');
-      startNextTurn(lobbyName);
-    }
-  }, 1000);
-}
-
-// Start the change game voting phase by sending cluster choices to all players and starting a 10‑second timer.
-function startChangeGameVoting(lobbyName) {
-  const state = activeLobbies[lobbyName];
-  if (!state) return;
-  if (state.changeGameVoting) return;
-  state.changeGameVoting = true;
-  state.clusterVotes = {};
-  // Pause the current turn
-  if (state.turnTimer) {
-    clearInterval(state.turnTimer);
-    state.turnTimer = null;
-  }
-  const clusterHeadings = objects.clusters.map(cluster => cluster.heading);
-  io.to(lobbyName).emit('changeGameVoting', { clusterHeadings, duration: 10 });
-  state.changeGameTimer = setTimeout(() => {
-      finishChangeGameVoting(lobbyName);
-  }, 10000);
-}
-
-// Tally votes after the 10‑second period, send vote details and result message,
-// then start a 10‑second countdown before resuming play.
-function finishChangeGameVoting(lobbyName) {
-  const state = activeLobbies[lobbyName];
-  if (!state || !state.changeGameVoting) return;
-  clearTimeout(state.changeGameTimer);
-  state.changeGameVoting = false;
-  let voteCounts = {};
-  let playerVotes = {};
-  for (let socketId in state.clusterVotes) {
-      const vote = state.clusterVotes[socketId];
-      voteCounts[vote] = (voteCounts[vote] || 0) + 1;
-      if (state.players[socketId]) {
-        playerVotes[state.players[socketId].nickname] = vote;
-      }
-  }
-  let maxVotes = 0;
-  let winners = [];
-  for (let cluster in voteCounts) {
-      if (voteCounts[cluster] > maxVotes) {
-          maxVotes = voteCounts[cluster];
-          winners = [cluster];
-      } else if (voteCounts[cluster] === maxVotes) {
-          winners.push(cluster);
-      }
-  }
-  let resultMessage = "";
-  let chosenCluster;
-  if (winners.length === 1) {
-      chosenCluster = winners[0];
-      resultMessage = `${chosenCluster.toUpperCase()} CLUSTER WON THE VOTE`;
-  } else {
-      resultMessage = "VOTE IS TIED, STATUS QUO CONTINUES";
-      chosenCluster = state.currentCluster || (objects.clusters[0] && objects.clusters[0].heading);
-  }
-  // Emit the vote results including how each player voted
-  io.to(lobbyName).emit('changeGameVoteResult', { playerVotes, resultMessage });
-  
-  // Start a 10-second countdown before resuming play.
-  let countdown = 10;
-  io.to(lobbyName).emit('changeGameResultCountdown', countdown);
-  state.changeGameResultTimer = setInterval(() => {
-    countdown--;
-    io.to(lobbyName).emit('changeGameResultCountdown', countdown);
-    if (countdown <= 0) {
-      clearInterval(state.changeGameResultTimer);
-      state.changeGameResultTimer = null;
-      state.currentCluster = chosenCluster;
       startNextTurn(lobbyName);
     }
   }, 1000);
@@ -255,6 +165,7 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
+    // Broadcast join notification in full uppercase without colon.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
     socket.emit('init', {
       players: state.playerOrder.map(id => {
@@ -279,7 +190,7 @@ io.on('connection', (socket) => {
         duration: DECISION_DURATION,
         currentDrawerName: currentDrawerName
       });
-      const options = getRandomObjects(3, state.currentCluster);
+      const options = getRandomObjects(3);
       io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
       let timeLeft = DECISION_DURATION;
       state.currentDecisionTimeLeft = timeLeft;
@@ -332,23 +243,6 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    
-    // Handle "CHANGE GAME" trigger:
-    // If the message is exactly "CHANGE GAME" (case-insensitive) and no other messages have intervened,
-    // record the vote. If every player in the lobby has sent it, start the change game voting phase.
-    if (!state.changeGameVoting && message.trim().toUpperCase() === "CHANGE GAME") {
-      if (!state.changeGameVotes) state.changeGameVotes = {};
-      state.changeGameVotes[socket.id] = true;
-      if (Object.keys(state.players).length > 0 && Object.keys(state.changeGameVotes).length === Object.keys(state.players).length) {
-          startChangeGameVoting(lobbyName);
-      }
-      return;
-    } else if (!state.changeGameVoting && message.trim().toUpperCase() !== "CHANGE GAME") {
-      // Any other message resets the change game votes.
-      state.changeGameVotes = {};
-    }
-    
-    // Normal guessing/chat logic
     if (state.currentObject && socket.id !== state.currentDrawer) {
       if (!state.guessedCorrectly[socket.id]) {
         const guess = message.trim().toLowerCase();
@@ -383,16 +277,6 @@ io.on('connection', (socket) => {
       state.chatMessages.shift();
     }
     io.to(lobbyName).emit('chatMessage', chatData);
-  });
-  
-  // Handle cluster votes from the voting buttons.
-  socket.on('clusterVote', (clusterHeading) => {
-    const lobbyName = socket.lobby;
-    if (!lobbyName || !activeLobbies[lobbyName]) return;
-    const state = activeLobbies[lobbyName];
-    if (!state.changeGameVoting) return;
-    if (!state.clusterVotes) state.clusterVotes = {};
-    state.clusterVotes[socket.id] = clusterHeading;
   });
   
   // --- Drawing events ---
