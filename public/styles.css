@@ -104,7 +104,7 @@ body, html {
   z-index: 1;
 }
 
-/* Tools bar (now a separate section under the canvas) */
+/* Tools bar (separate section below canvas) */
 #toolsBar {
   margin: 5px;
   padding: 5px;
@@ -164,8 +164,10 @@ body, html {
   background-color: #a5d6a7;
 }
 
-.boxView {
-  font-size: 16px;
+/* Chat view messages */
+.boxView p {
+  margin: 3px 0;
+  word-wrap: break-word;
 }
 
 /* Chat input area */
@@ -173,6 +175,8 @@ body, html {
   display: flex;
   padding: 5px;
   background-color: #81c784;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #chatInput {
@@ -180,13 +184,8 @@ body, html {
   padding: 5px;
   border: none;
   border-radius: 4px;
-}
-
-#sendChat {
-  background-color: #388e3c;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  margin-left: 5px;
-  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  /* Prevent overflow */
+  overflow: hidden;
 }
