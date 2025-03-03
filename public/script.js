@@ -18,6 +18,9 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
+// Auto-scroll flag for chat; default is true (we want to show the latest messages)
+let autoScrollEnabled = true;
+
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
@@ -36,7 +39,6 @@ joinBtn.addEventListener('click', () => {
   if(name) {
     nickname = name;
     nicknameModal.style.display = 'none';
-    // Fetch lobby list from the server
     fetch('/lobbies')
       .then(res => res.json())
       .then(data => {
@@ -63,7 +65,6 @@ joinBtn.addEventListener('click', () => {
   }
 });
 
-// Handle joining lobby after passcode entry
 joinLobbyBtn.addEventListener('click', () => {
   const lobbyName = selectedLobbyNameElem.getAttribute('data-lobby');
   const passcode = lobbyPasscodeInput.value.trim();
@@ -74,13 +75,11 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
-  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
-  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -110,13 +109,16 @@ function resizeLayout() {
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
+  // Set canvas dimensions: full width and 75% of width as height.
   canvas.width = width;
-  canvas.height = width;
-  canvasContainer.style.height = width + "px";
+  const canvasHeight = width * 0.75;
+  canvas.height = canvasHeight;
+  canvasContainer.style.height = canvasHeight + "px";
 
   const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
   const totalHeight = gameContainer.clientHeight;
-  const boxHeight = totalHeight - width - toolsHeight;
+  // The remaining height goes to the message box.
+  const boxHeight = totalHeight - canvasHeight - toolsHeight;
   boxContainer.style.height = boxHeight + "px";
 
   redrawStrokes();
@@ -127,7 +129,8 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // No auto-scroll needed as newest messages appear at the top.
+  // Ensure chat box is scrolled to bottom on load.
+  chatBox.scrollTop = chatBox.scrollHeight;
 });
 
 // --- Chat and Player Box ---
@@ -165,18 +168,17 @@ sendChatBtn.addEventListener('click', () => {
   }
 });
 
-// Updated addChatMessage: insert new messages at the top.
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
-  // Insert new message at the top of chatBox
+  // Insert new message at the top
   if(chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
   
-  // Enforce message limit: keep only the last 30 messages (remove from bottom)
+  // Enforce message limit: keep only 30 messages (remove from bottom)
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
