@@ -18,7 +18,7 @@ let currentDrawTime = null;
 // Flag to track current view of the box (true = Chat, false = Players)
 let isChatView = true;
 
-// Auto-scroll flag for chat; default is true (we want latest messages to be visible)
+// Auto-scroll flag for chat; default is true (we want to show the latest messages)
 let autoScrollEnabled = true;
 
 // --- Modal Elements ---
@@ -48,6 +48,7 @@ joinBtn.addEventListener('click', () => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
           if (lobby.passcode === "") {
+            // Directly join if no passcode is required.
             btn.addEventListener('click', () => {
               socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
             });
@@ -77,11 +78,13 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
+  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
+  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -128,7 +131,7 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Initially ensure the chat box shows the latest messages.
+  // Ensure chat box is scrolled to bottom on load.
   chatBox.scrollTop = chatBox.scrollHeight;
 });
 
@@ -148,17 +151,26 @@ toggleBoxBtn.addEventListener('click', () => {
   isChatView = !isChatView;
 });
 
-// Use an IntersectionObserver on the chatBottom element to set autoScrollEnabled.
-const chatBottom = document.getElementById('chatBottom');
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    autoScrollEnabled = entry.isIntersecting;
-  });
-}, { root: chatBox, threshold: 1.0 });
-observer.observe(chatBottom);
+// Auto-scroll logic: if the user is within 30 pixels of the bottom, auto-scroll is enabled.
+chatBox.addEventListener('scroll', () => {
+  const threshold = 30;
+  if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight <= threshold) {
+    autoScrollEnabled = true;
+  } else {
+    autoScrollEnabled = false;
+  }
+});
 
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChat');
+
+// Allow sending message by pressing Enter
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendChatBtn.click();
+  }
+});
 
 sendChatBtn.addEventListener('click', () => {
   const msg = chatInput.value.trim();
@@ -171,9 +183,10 @@ sendChatBtn.addEventListener('click', () => {
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
-  chatBox.insertBefore(p, chatBottom); // insert above the bottom marker
+  chatBox.appendChild(p);
+  // Auto-scroll to bottom if enabled.
   if(autoScrollEnabled) {
-    chatBottom.scrollIntoView({ behavior: "smooth" });
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
 }
 
