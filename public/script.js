@@ -127,8 +127,7 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Always scroll chat box to bottom on load.
-  chatBox.scrollTop = chatBox.scrollHeight;
+  // No auto-scroll needed as newest messages appear at the top.
 });
 
 // --- Chat and Player Box ---
@@ -166,19 +165,22 @@ sendChatBtn.addEventListener('click', () => {
   }
 });
 
+// Updated addChatMessage: insert new messages at the top.
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
-  chatBox.appendChild(p);
-
-  // Enforce message limit: keep only the last 30 messages.
-  const messages = chatBox.querySelectorAll('p');
-  while (messages.length > 30) {
-    chatBox.removeChild(messages[0]);
+  // Insert new message at the top of chatBox
+  if(chatBox.firstChild) {
+    chatBox.insertBefore(p, chatBox.firstChild);
+  } else {
+    chatBox.appendChild(p);
   }
   
-  // Always scroll to bottom.
-  chatBox.scrollTop = chatBox.scrollHeight;
+  // Enforce message limit: keep only the last 30 messages (remove from bottom)
+  const messages = chatBox.querySelectorAll('p');
+  while (messages.length > 30) {
+    chatBox.removeChild(messages[messages.length - 1]);
+  }
 }
 
 function updatePlayerList(playersArr) {
@@ -502,10 +504,6 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
 
 chatInput.addEventListener('focus', () => {
   resizeLayout();
-  // Force scroll to bottom when input is focused.
-  setTimeout(() => {
-    chatBox.scrollTop = chatBox.scrollHeight;
-  }, 500);
 });
 chatInput.addEventListener('blur', () => {
   resizeLayout();
