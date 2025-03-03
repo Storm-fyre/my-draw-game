@@ -50,14 +50,12 @@
       <div id="turnPrompt">
         <div id="turnMessage">
           <p id="promptText">Your turn! Choose an object:</p>
-          <div id="turnOptions">
-            <!-- Options inserted dynamically -->
-          </div>
+          <div id="turnOptions"></div>
           <div id="countdownDisplay">10</div>
         </div>
       </div>
     </div>
-    <!-- Tools bar section (separate from canvas) -->
+    <!-- Tools bar section -->
     <div id="toolsBar">
       <div id="brushThickness">
         <span>Thickness:</span>
@@ -90,7 +88,7 @@
         <button class="color" data-color="#A52A2A" style="background:#A52A2A;"></button>
       </div>
     </div>
-    <!-- Bottom box container (chat and players list) -->
+    <!-- Message box (chat and players) container -->
     <div id="boxContainer">
       <div id="boxHeader">
         <button id="toggleBox">Chat/Players</button>
@@ -98,23 +96,18 @@
       <div id="boxContent">
         <!-- Chat view -->
         <div id="chatBox" class="boxView">
-          <!-- Chat messages will be appended here -->
-          <div id="chatBottom"></div>
+          <!-- Chat messages will be inserted here (new messages at top) -->
         </div>
         <!-- Players list view -->
-        <div id="playerBox" class="boxView" style="display:none;">
-          <!-- Player names and scores will be appended here -->
-        </div>
+        <div id="playerBox" class="boxView" style="display:none;"></div>
       </div>
-      <!-- Chat input area -->
+      <!-- Chat input area (no send button) -->
       <div id="chatInputContainer">
         <input type="text" id="chatInput" placeholder="Type your message...">
-        <button id="sendChat">Send</button>
       </div>
     </div>
-    
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
   </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>

@@ -15,8 +15,11 @@ let currentRemoteStroke = null;
 let currentObjectStr = null;
 let currentDrawTime = null;
 
-// Flag to track current view of the box (true = Chat, false = Players)
+// Flag to track current view (true = Chat, false = Players)
 let isChatView = true;
+
+// New flag for keyboard activity
+let isKeyboardActive = false;
 
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
@@ -91,76 +94,80 @@ const drawCountdown = document.getElementById('drawCountdown');
 
 function redrawStrokes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  paths.forEach(stroke => {
-    drawStroke(stroke, false);
-  });
-  if (currentRemoteStroke) {
-    drawStroke(currentRemoteStroke, false);
+  paths.forEach(stroke => drawStroke(stroke, false));
+  if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
+}
+
+// This function adjusts layout based on keyboard state.
+function adjustLayoutForKeyboard(active) {
+  const gameContainer = document.getElementById('gameContainer');
+  const canvasContainer = document.getElementById('canvasContainer');
+  const boxContainer = document.getElementById('boxContainer');
+  const toolsBar = document.getElementById('toolsBar');
+  if (active) {
+    isKeyboardActive = true;
+    // Switch layout to horizontal.
+    gameContainer.style.flexDirection = 'row';
+    // Canvas takes 75% of width.
+    canvasContainer.style.width = '75%';
+    // Set canvas to be square based on its container's width.
+    let newWidth = gameContainer.clientWidth * 0.75;
+    canvas.width = newWidth;
+    canvas.height = newWidth;
+    canvasContainer.style.height = newWidth + "px";
+    // Message box takes 25% of width and its height equals canvas height.
+    boxContainer.style.width = '25%';
+    boxContainer.style.height = newWidth + "px";
+    // Hide tools section.
+    toolsBar.style.display = 'none';
+  } else {
+    isKeyboardActive = false;
+    // Restore vertical layout.
+    gameContainer.style.flexDirection = 'column';
+    // Restore canvas container to full width.
+    canvasContainer.style.width = '100%';
+    // Show tools section.
+    toolsBar.style.display = 'flex';
+    // Call normal resizeLayout to recalc dimensions.
+    resizeLayout();
+    // Set message box width to auto (full width below canvas).
+    boxContainer.style.width = '100%';
   }
 }
 
 function resizeLayout() {
+  // If keyboard is active, use adjustLayoutForKeyboard instead.
+  if (isKeyboardActive) return;
   const gameContainer = document.getElementById('gameContainer');
+  const boxContainer = document.getElementById('boxContainer');
   const canvasContainer = document.getElementById('canvasContainer');
   const toolsBar = document.getElementById('toolsBar');
-  const boxContainer = document.getElementById('boxContainer');
+
+  const width = gameContainer.clientWidth;
+  // Canvas is square (full width)
+  canvas.width = width;
+  canvas.height = width;
+  canvasContainer.style.height = width + "px";
+
+  const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
   const totalHeight = gameContainer.clientHeight;
-  const containerWidth = gameContainer.clientWidth;
-  
-  // Check if the chat input is focused (keyboard is active)
-  const keyboardActive = (document.activeElement === document.getElementById('chatInput'));
-  
-  if (keyboardActive) {
-    // Keyboard mode:
-    // - Canvas is 75% of containerWidth (square)
-    // - Message box is 25% of containerWidth, and height equal to canvas side.
-    const canvasSide = containerWidth * 0.75;
-    canvas.width = canvasSide;
-    canvas.height = canvasSide;
-    canvasContainer.style.width = canvasSide + "px";
-    canvasContainer.style.height = canvasSide + "px";
-    
-    // Position canvasContainer at top left.
-    canvasContainer.style.display = "inline-block";
-    
-    // Set boxContainer (chat box) to occupy remaining 25% width, same height as canvas.
-    boxContainer.style.width = containerWidth * 0.25 + "px";
-    boxContainer.style.height = canvasSide + "px";
-    boxContainer.style.display = "inline-block";
-    
-    // In keyboard mode, we want to display canvasContainer and boxContainer side-by-side.
-    // We adjust the parent container's flex direction.
-    gameContainer.style.flexDirection = "row";
-    
-    // Optionally, hide toolsBar if needed or keep it as is.
-    // We'll leave toolsBar unchanged.
-  } else {
-    // Normal mode:
-    // - Canvas is a square with side = containerWidth.
-    // - ToolsBar remains below the canvas.
-    // - Message box takes the remaining vertical space.
-    gameContainer.style.flexDirection = "column";
-    canvasContainer.style.display = "block";
-    boxContainer.style.display = "block";
-    
-    canvas.width = containerWidth;
-    canvas.height = containerWidth;
-    canvasContainer.style.height = containerWidth + "px";
-    
-    const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
-    const boxHeight = totalHeight - containerWidth - toolsHeight;
-    boxContainer.style.height = boxHeight + "px";
-    boxContainer.style.width = "100%";
-  }
-  
+  const boxHeight = totalHeight - width - toolsHeight;
+  boxContainer.style.height = boxHeight + "px";
+
   redrawStrokes();
   updateDashHint();
 }
 
-window.addEventListener('resize', resizeLayout);
-window.addEventListener('orientationchange', resizeLayout);
+window.addEventListener('resize', () => {
+  if (!isKeyboardActive) resizeLayout();
+});
+window.addEventListener('orientationchange', () => {
+  if (!isKeyboardActive) resizeLayout();
+});
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
+  // Ensure chat box is scrolled to bottom on load.
+  chatBox.scrollTop = chatBox.scrollHeight;
 });
 
 // --- Chat and Player Box ---
@@ -169,7 +176,7 @@ const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
 
 toggleBoxBtn.addEventListener('click', () => {
-  if(isChatView){
+  if (isChatView) {
     chatBox.style.display = 'none';
     playerBox.style.display = 'block';
   } else {
@@ -180,29 +187,33 @@ toggleBoxBtn.addEventListener('click', () => {
 });
 
 const chatInput = document.getElementById('chatInput');
-const sendChatBtn = document.getElementById('sendChat');
 
-// Allow sending message by pressing Enter.
+// Send message on Enter key.
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
-    sendChatBtn.click();
+    const msg = chatInput.value.trim();
+    if (msg) {
+      socket.emit('chatMessage', msg);
+      chatInput.value = '';
+    }
   }
 });
 
-sendChatBtn.addEventListener('click', () => {
-  const msg = chatInput.value.trim();
-  if(msg) {
-    socket.emit('chatMessage', msg);
-    chatInput.value = '';
-  }
+// When chat input is focused, assume keyboard is active.
+chatInput.addEventListener('focus', () => {
+  adjustLayoutForKeyboard(true);
+});
+// When chat input loses focus, revert layout.
+chatInput.addEventListener('blur', () => {
+  adjustLayoutForKeyboard(false);
 });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
-  // Insert new message at the top
-  if(chatBox.firstChild) {
+  // Insert new message at the top.
+  if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
@@ -223,7 +234,7 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (handles only 1-word and 2-word objects)
+// --- Dash hint update function --- (for 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -265,11 +276,11 @@ function updateDashHint() {
 // --- Socket events ---
 socket.on('init', (data) => {
   updatePlayerList(data.players);
-  if(data.canvasStrokes) {
+  if (data.canvasStrokes) {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  if(data.decisionTimeLeft !== null && data.currentDrawer) {
+  if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
     promptText.textContent = `Player #${data.currentDrawerRank} (${data.currentDrawerName}) is choosing a word...`;
     turnOptionsDiv.innerHTML = "";
@@ -317,11 +328,11 @@ const turnOptionsDiv = document.getElementById('turnOptions');
 const countdownDisplay = document.getElementById('countdownDisplay');
 
 socket.on('turnStarted', (data) => {
-  if(data.currentDrawer === socket.id) {
+  if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
     turnPrompt.style.display = 'flex';
-    if(currentObjectStr) {
+    if (currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
     }
@@ -337,7 +348,7 @@ socket.on('turnStarted', (data) => {
 });
 
 socket.on('turnCountdown', (timeLeft) => {
-  if(turnPrompt.style.display !== 'none') {
+  if (turnPrompt.style.display !== 'none') {
     countdownDisplay.textContent = timeLeft;
   }
 });
@@ -350,7 +361,7 @@ socket.on('turnTimeout', () => {
 });
 
 socket.on('objectSelection', (data) => {
-  if(data.options && data.options.length > 0) {
+  if (data.options && data.options.length > 0) {
     isMyTurn = true;
     turnPrompt.style.display = 'flex';
     promptText.textContent = "Choose an object to draw:";
@@ -372,21 +383,21 @@ socket.on('objectChosenBroadcast', (data) => {
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
-  if(isMyTurn) {
+  if (isMyTurn) {
     objectDisplayElem.style.display = 'block';
     objectDisplayElem.textContent = data.object;
   }
 });
 
 socket.on('drawPhaseStarted', (data) => {
-  if(data.currentDrawer === socket.id) {
+  if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
     dashHintDiv.textContent = "";
     drawControlsDiv.style.display = 'block';
-    if(currentObjectStr) {
+    if (currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
     }
@@ -418,7 +429,7 @@ socket.on('drawPhaseTimeout', () => {
 function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
-  if(e.touches && e.touches.length > 0) {
+  if (e.touches && e.touches.length > 0) {
     x = e.touches[0].clientX - rect.left;
     y = e.touches[0].clientY - rect.top;
   } else {
@@ -446,7 +457,7 @@ function drawingMove(e) {
 
 function stopDrawing(e) {
   if (!isMyTurn) return;
-  if(isDrawing) {
+  if (isDrawing) {
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
     socket.emit('strokeComplete', stroke);
@@ -464,7 +475,7 @@ canvas.addEventListener('touchmove', (e) => { drawingMove(e); e.preventDefault()
 canvas.addEventListener('touchend', (e) => { stopDrawing(e); });
 
 function drawStroke(data, emitLocal) {
-  if(!data.path || data.path.length < 2) return;
+  if (!data.path || data.path.length < 2) return;
   ctx.strokeStyle = data.color;
   ctx.lineWidth = data.thickness;
   ctx.lineCap = 'round';
@@ -472,7 +483,7 @@ function drawStroke(data, emitLocal) {
 
   ctx.beginPath();
   ctx.moveTo(data.path[0].x * canvas.width, data.path[0].y * canvas.height);
-  for(let i = 1; i < data.path.length - 1; i++) {
+  for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
     const x_next = data.path[i+1].x * canvas.width;
@@ -506,13 +517,13 @@ colorButtons.forEach(btn => {
 });
 
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if(isMyTurn) {
+  if (isMyTurn) {
     socket.emit('undo');
     undoLastStroke();
   }
 });
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if(isMyTurn) {
+  if (isMyTurn) {
     socket.emit('clear');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
@@ -520,7 +531,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   }
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
-  if(isMyTurn) {
+  if (isMyTurn) {
     socket.emit('giveUp');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
@@ -534,8 +545,8 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
 });
 
 chatInput.addEventListener('focus', () => {
-  resizeLayout();
+  adjustLayoutForKeyboard(true);
 });
 chatInput.addEventListener('blur', () => {
-  resizeLayout();
+  adjustLayoutForKeyboard(false);
 });
