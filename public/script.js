@@ -5,7 +5,8 @@ let isDrawing = false;
 let currentPath = [];
 let paths = []; // stored complete strokes (for redrawing)
 let currentColor = "#000000";
-let currentThickness = 4;
+// Default thickness is now 2px.
+let currentThickness = 2;
 let isMyTurn = false;
 
 // For non-drawing players: store the current remote stroke (in progress)
@@ -18,8 +19,11 @@ let currentDrawTime = null;
 // Flag to track current view (true = Chat, false = Players)
 let isChatView = true;
 
-// New flag for keyboard activity
+// Flag for keyboard activity
 let isKeyboardActive = false;
+
+// Timer for clearing object display after drawing phase (70 sec)
+let drawPhaseObjectTimer = null;
 
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
@@ -98,7 +102,7 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// This function adjusts layout based on keyboard state.
+// Layout adjustment when keyboard is active.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -106,21 +110,23 @@ function adjustLayoutForKeyboard(active) {
   const toolsBar = document.getElementById('toolsBar');
   if (active) {
     isKeyboardActive = true;
-    // Switch layout to horizontal.
+    // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
-    // Canvas takes 75% of width.
+    // Canvas container becomes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
+    // Preserve drawing continuity: update dimensions and redraw strokes.
     canvas.width = newWidth;
-    canvas.height = newWidth; // square canvas
+    canvas.height = newWidth; // square canvas remains
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width, height equals canvas height.
+    // Message box takes 25% of width, height equal to canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
     // Hide tools section.
     toolsBar.style.display = 'none';
     // Change chat input placeholder.
     chatInput.placeholder = "Type:";
+    redrawStrokes();
   } else {
     isKeyboardActive = false;
     // Restore vertical layout.
@@ -133,6 +139,7 @@ function adjustLayoutForKeyboard(active) {
   }
 }
 
+// Normal layout: canvas is full-width square.
 function resizeLayout() {
   if (isKeyboardActive) return;
   const gameContainer = document.getElementById('gameContainer');
@@ -141,7 +148,6 @@ function resizeLayout() {
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
-  // Canvas is a full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
@@ -196,12 +202,11 @@ chatInput.addEventListener('keydown', (e) => {
   }
 });
 
-// When chat input is focused, adjust layout for keyboard and change placeholder.
+// When chat input is focused, adjust layout and change placeholder.
 chatInput.addEventListener('focus', () => {
   adjustLayoutForKeyboard(true);
 });
-
-// When chat input is blurred, revert layout and placeholder.
+// When chat input is blurred, revert layout.
 chatInput.addEventListener('blur', () => {
   adjustLayoutForKeyboard(false);
 });
@@ -215,7 +220,7 @@ function addChatMessage(data) {
   } else {
     chatBox.appendChild(p);
   }
-  // Enforce message limit: keep only 30 messages (remove from bottom).
+  // Enforce message limit: keep only the last 30 messages (remove from bottom).
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -231,7 +236,7 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (for 1-word and 2-word objects)
+// --- Dash hint update function --- (handles only 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -267,6 +272,7 @@ function updateDashHint() {
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   }
+  // Slightly increased spacing.
   dashHintDiv.textContent = hintWords.join("    ");
 }
 
@@ -332,6 +338,14 @@ socket.on('turnStarted', (data) => {
     if (currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
+      // Increase font size slightly.
+      objectDisplayElem.style.fontSize = "14px";
+      // Set a timeout to clear the object display after 70 seconds.
+      if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
+      drawPhaseObjectTimer = setTimeout(() => {
+        objectDisplayElem.style.display = 'none';
+        objectDisplayElem.textContent = '';
+      }, 70000);
     }
   } else {
     isMyTurn = false;
@@ -383,6 +397,7 @@ socket.on('objectChosenBroadcast', (data) => {
   if (isMyTurn) {
     objectDisplayElem.style.display = 'block';
     objectDisplayElem.textContent = data.object;
+    objectDisplayElem.style.fontSize = "14px";
   }
 });
 
@@ -397,6 +412,12 @@ socket.on('drawPhaseStarted', (data) => {
     if (currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
+      objectDisplayElem.style.fontSize = "14px";
+      if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
+      drawPhaseObjectTimer = setTimeout(() => {
+        objectDisplayElem.style.display = 'none';
+        objectDisplayElem.textContent = '';
+      }, 70000);
     }
   } else {
     isMyTurn = false;
@@ -421,6 +442,7 @@ socket.on('drawPhaseTimeout', () => {
   dashHintDiv.textContent = "";
   objectDisplayElem.style.display = 'none';
   objectDisplayElem.textContent = '';
+  if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
 });
 
 function getNormalizedPos(e) {
@@ -483,8 +505,8 @@ function drawStroke(data, emitLocal) {
   for (let i = 1; i < data.path.length - 1; i++) {
     const x_i = data.path[i].x * canvas.width;
     const y_i = data.path[i].y * canvas.height;
-    const x_next = data.path[i + 1].x * canvas.width;
-    const y_next = data.path[i + 1].y * canvas.height;
+    const x_next = data.path[i+1].x * canvas.width;
+    const y_next = data.path[i+1].y * canvas.height;
     const midX = (x_i + x_next) / 2;
     const midY = (y_i + y_next) / 2;
     ctx.quadraticCurveTo(x_i, y_i, midX, midY);
@@ -538,6 +560,7 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
     dashHintDiv.textContent = "";
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
+    if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
   }
 });
 
