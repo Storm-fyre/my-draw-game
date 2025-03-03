@@ -3,23 +3,20 @@ const socket = io();
 let nickname = "";
 let isDrawing = false;
 let currentPath = [];
-let paths = []; // stored complete strokes (for redrawing)
+let paths = []; // stored complete strokes
 let currentColor = "#000000";
 let currentThickness = 4;
 let isMyTurn = false;
 
-// For non-drawing players: store the current remote stroke (in progress)
+// For non-drawing players: store the current remote stroke
 let currentRemoteStroke = null;
 
 // For dash hint (object reveal)
 let currentObjectStr = null;
 let currentDrawTime = null;
 
-// Flag to track current view of the box (true = Chat, false = Players)
+// Flag for Chat/Players view (true = Chat, false = Players)
 let isChatView = true;
-
-// Auto-scroll flag for chat; default is true (we want to show the latest messages)
-let autoScrollEnabled = true;
 
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
@@ -33,7 +30,6 @@ const selectedLobbyNameElem = document.getElementById('selectedLobbyName');
 const lobbyPasscodeInput = document.getElementById('lobbyPasscodeInput');
 const joinLobbyBtn = document.getElementById('joinLobbyBtn');
 
-// --- After entering nickname, show lobby selection ---
 joinBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
   if(name) {
@@ -84,7 +80,7 @@ socket.on('lobbyError', (data) => {
   lobbyPasscodeContainer.style.display = 'none';
 });
 
-// --- Canvas setup ---
+// --- Canvas Setup ---
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
@@ -94,9 +90,7 @@ const drawCountdown = document.getElementById('drawCountdown');
 
 function redrawStrokes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  paths.forEach(stroke => {
-    drawStroke(stroke, false);
-  });
+  paths.forEach(stroke => drawStroke(stroke, false));
   if (currentRemoteStroke) {
     drawStroke(currentRemoteStroke, false);
   }
@@ -109,18 +103,35 @@ function resizeLayout() {
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
-  // Set canvas dimensions: full width and 75% of width as height.
   canvas.width = width;
-  const canvasHeight = width * 0.75;
+  // Set canvas height to 85% of width
+  const canvasHeight = width * 0.85;
   canvas.height = canvasHeight;
   canvasContainer.style.height = canvasHeight + "px";
 
-  const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
-  const totalHeight = gameContainer.clientHeight;
-  // The remaining height goes to the message box.
-  const boxHeight = totalHeight - canvasHeight - toolsHeight;
-  boxContainer.style.height = boxHeight + "px";
+  // Check if the chat input is focused (keyboard on screen)
+  const keyboardOn = document.activeElement === document.getElementById('chatInput');
 
+  if(keyboardOn) {
+    // Hide tools section when keyboard is up
+    if(toolsBar) {
+      toolsBar.style.display = 'none';
+    }
+    // Set message box height to 30% of remaining space after canvas
+    const remaining = gameContainer.clientHeight - canvasHeight;
+    boxContainer.style.height = (remaining * 0.3) + "px";
+  } else {
+    // Show tools section normally
+    if(toolsBar) {
+      toolsBar.style.display = 'flex';
+    }
+    // Message box gets the remaining space after canvas and tools section
+    const toolsHeight = toolsBar ? toolsBar.offsetHeight : 0;
+    const totalHeight = gameContainer.clientHeight;
+    const boxHeight = totalHeight - canvasHeight - toolsHeight;
+    boxContainer.style.height = boxHeight + "px";
+  }
+  
   redrawStrokes();
   updateDashHint();
 }
@@ -129,8 +140,6 @@ window.addEventListener('resize', resizeLayout);
 window.addEventListener('orientationchange', resizeLayout);
 document.addEventListener('DOMContentLoaded', () => {
   resizeLayout();
-  // Ensure chat box is scrolled to bottom on load.
-  chatBox.scrollTop = chatBox.scrollHeight;
 });
 
 // --- Chat and Player Box ---
@@ -139,7 +148,7 @@ const chatBox = document.getElementById('chatBox');
 const playerBox = document.getElementById('playerBox');
 
 toggleBoxBtn.addEventListener('click', () => {
-  if(isChatView){
+  if(isChatView) {
     chatBox.style.display = 'none';
     playerBox.style.display = 'block';
   } else {
@@ -152,7 +161,6 @@ toggleBoxBtn.addEventListener('click', () => {
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChat');
 
-// Allow sending message by pressing Enter.
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -177,8 +185,7 @@ function addChatMessage(data) {
   } else {
     chatBox.appendChild(p);
   }
-  
-  // Enforce message limit: keep only 30 messages (remove from bottom)
+  // Enforce message limit: only keep the last 30 messages (remove bottom ones)
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -194,31 +201,31 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (handles only 1-word and 2-word objects)
+// --- Dash Hint Update Function --- (for 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
     return;
   }
-  let words = currentObjectStr.split(' ');
-  let hintWords = [];
+  const words = currentObjectStr.split(' ');
+  const hintWords = [];
   if (words.length === 1) {
-    let word = words[0];
+    const word = words[0];
     let revealed = "";
-    if (currentDrawTime <= 50) { revealed = word.charAt(0); }
-    if (currentDrawTime <= 30 && word.length > 1) { revealed += word.charAt(1); }
-    if (currentDrawTime <= 10 && word.length > 2) { revealed += word.charAt(2); }
+    if (currentDrawTime <= 50) revealed = word.charAt(0);
+    if (currentDrawTime <= 30 && word.length > 1) revealed += word.charAt(1);
+    if (currentDrawTime <= 10 && word.length > 2) revealed += word.charAt(2);
     let display = "";
     for (let i = 0; i < word.length; i++) {
       display += (i < revealed.length ? word.charAt(i) : "_") + " ";
     }
     hintWords.push(display.trim());
   } else if (words.length === 2) {
-    let [word1, word2] = words;
+    const [word1, word2] = words;
     let r1 = "", r2 = "";
-    if (currentDrawTime <= 50) { r1 = word1.charAt(0); }
-    if (currentDrawTime <= 30) { r2 = word2.charAt(0); }
-    if (currentDrawTime <= 10 && word1.length > 1) { r1 += word1.charAt(1); }
+    if (currentDrawTime <= 50) r1 = word1.charAt(0);
+    if (currentDrawTime <= 30) r2 = word2.charAt(0);
+    if (currentDrawTime <= 10 && word1.length > 1) r1 += word1.charAt(1);
     let disp1 = "";
     for (let i = 0; i < word1.length; i++) {
       disp1 += (i < r1.length ? word1.charAt(i) : "_") + " ";
@@ -233,7 +240,7 @@ function updateDashHint() {
   dashHintDiv.textContent = hintWords.join("    ");
 }
 
-// --- Socket events ---
+// --- Socket Events ---
 socket.on('init', (data) => {
   updatePlayerList(data.players);
   if(data.canvasStrokes) {
@@ -281,7 +288,6 @@ socket.on('undo', () => {
   undoLastStroke();
 });
 
-// Turn and object selection events
 const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const turnOptionsDiv = document.getElementById('turnOptions');
