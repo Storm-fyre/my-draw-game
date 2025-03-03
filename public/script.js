@@ -48,7 +48,6 @@ joinBtn.addEventListener('click', () => {
           const btn = document.createElement('button');
           btn.textContent = lobby.name;
           if (lobby.passcode === "") {
-            // Directly join if no passcode is required.
             btn.addEventListener('click', () => {
               socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
             });
@@ -78,13 +77,11 @@ joinLobbyBtn.addEventListener('click', () => {
 
 socket.on('lobbyJoined', (data) => {
   lobbyModal.style.display = 'none';
-  // Now send nickname to join the game in the chosen lobby.
   socket.emit('setNickname', nickname);
 });
 
 socket.on('lobbyError', (data) => {
   alert(data.message);
-  // Reset lobby modal view
   lobbyButtonsDiv.style.display = 'block';
   lobbyPasscodeContainer.style.display = 'none';
 });
@@ -151,9 +148,9 @@ toggleBoxBtn.addEventListener('click', () => {
   isChatView = !isChatView;
 });
 
-// Auto-scroll logic: if the user is within 30 pixels of the bottom, auto-scroll is enabled.
+// Auto-scroll logic: if the user is within 50 pixels of the bottom, enable auto-scroll.
 chatBox.addEventListener('scroll', () => {
-  const threshold = 30;
+  const threshold = 50;
   if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight <= threshold) {
     autoScrollEnabled = true;
   } else {
@@ -181,10 +178,18 @@ sendChatBtn.addEventListener('click', () => {
 });
 
 function addChatMessage(data) {
+  // Create new message element
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
   chatBox.appendChild(p);
-  // Auto-scroll to bottom if enabled.
+
+  // Enforce message limit: only keep the last 30 messages
+  const messages = chatBox.querySelectorAll('p');
+  while (messages.length > 30) {
+    chatBox.removeChild(messages[0]);
+  }
+  
+  // Auto-scroll if enabled
   if(autoScrollEnabled) {
     chatBox.scrollTop = chatBox.scrollHeight;
   }
