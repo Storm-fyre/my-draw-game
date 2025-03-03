@@ -18,11 +18,8 @@ let currentDrawTime = null;
 // Flag to track current view (true = Chat, false = Players)
 let isChatView = true;
 
-// Flag for keyboard mode (true when keyboard is visible)
+// New flag for keyboard activity
 let isKeyboardActive = false;
-
-// Record baseline window height when keyboard is hidden.
-let baselineHeight = window.innerHeight;
 
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
@@ -101,7 +98,7 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// This function adjusts the layout when keyboard mode changes.
+// This function adjusts layout based on keyboard state.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -109,24 +106,21 @@ function adjustLayoutForKeyboard(active) {
   const toolsBar = document.getElementById('toolsBar');
   if (active) {
     isKeyboardActive = true;
-    // Switch to horizontal layout.
+    // Switch layout to horizontal.
     gameContainer.style.flexDirection = 'row';
-    // Canvas container takes 75% of width.
+    // Canvas takes 75% of width.
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
-    // IMPORTANT: Instead of reassigning canvas.width/height (which clears content),
-    // we use our paths to redraw. So we set new dimensions and then redraw.
     canvas.width = newWidth;
-    canvas.height = newWidth;
+    canvas.height = newWidth; // square canvas
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width; height equals new canvas height.
+    // Message box takes 25% of width, height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
     // Hide tools section.
     toolsBar.style.display = 'none';
     // Change chat input placeholder.
     chatInput.placeholder = "Type:";
-    redrawStrokes();
   } else {
     isKeyboardActive = false;
     // Restore vertical layout.
@@ -139,16 +133,15 @@ function adjustLayoutForKeyboard(active) {
   }
 }
 
-// Normal layout resize (when no keyboard)
 function resizeLayout() {
-  if (isKeyboardActive) return; // if keyboard mode, use adjustLayoutForKeyboard
+  if (isKeyboardActive) return;
   const gameContainer = document.getElementById('gameContainer');
   const boxContainer = document.getElementById('boxContainer');
   const canvasContainer = document.getElementById('canvasContainer');
   const toolsBar = document.getElementById('toolsBar');
 
   const width = gameContainer.clientWidth;
-  // Canvas is full-width square.
+  // Canvas is a full-width square.
   canvas.width = width;
   canvas.height = width;
   canvasContainer.style.height = width + "px";
@@ -163,31 +156,14 @@ function resizeLayout() {
 }
 
 window.addEventListener('resize', () => {
-  // Update baseline if not in keyboard mode.
-  if (!isKeyboardActive) {
-    baselineHeight = window.innerHeight;
-    resizeLayout();
-  }
+  if (!isKeyboardActive) resizeLayout();
 });
 window.addEventListener('orientationchange', () => {
   if (!isKeyboardActive) resizeLayout();
 });
 document.addEventListener('DOMContentLoaded', () => {
-  baselineHeight = window.innerHeight;
   resizeLayout();
   chatBox.scrollTop = chatBox.scrollHeight;
-});
-
-// New: Listen to window resize to detect keyboard appearance
-window.addEventListener("resize", () => {
-  // If the current window height is at least 100px less than baseline, assume keyboard is active.
-  if (window.innerHeight < baselineHeight - 100 && !isKeyboardActive) {
-    adjustLayoutForKeyboard(true);
-  }
-  // When window height is within 50px of baseline, assume keyboard is dismissed.
-  if (window.innerHeight >= baselineHeight - 50 && isKeyboardActive) {
-    adjustLayoutForKeyboard(false);
-  }
 });
 
 // --- Chat and Player Box ---
@@ -220,6 +196,16 @@ chatInput.addEventListener('keydown', (e) => {
   }
 });
 
+// When chat input is focused, adjust layout for keyboard and change placeholder.
+chatInput.addEventListener('focus', () => {
+  adjustLayoutForKeyboard(true);
+});
+
+// When chat input is blurred, revert layout and placeholder.
+chatInput.addEventListener('blur', () => {
+  adjustLayoutForKeyboard(false);
+});
+
 function addChatMessage(data) {
   const p = document.createElement('p');
   p.textContent = `${data.nickname}: ${data.message}`;
@@ -229,7 +215,7 @@ function addChatMessage(data) {
   } else {
     chatBox.appendChild(p);
   }
-  // Enforce message limit: keep only 30 messages (remove from bottom)
+  // Enforce message limit: keep only 30 messages (remove from bottom).
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
