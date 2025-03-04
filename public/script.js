@@ -8,6 +8,7 @@ let currentColor = "#000000";
 // Default thickness is now 2px.
 let currentThickness = 2;
 let isMyTurn = false;
+let isFreeStroke = false; // Flag for Free Stroke lobby
 
 // For non-drawing players: store current remote stroke
 let currentRemoteStroke = null;
@@ -274,7 +275,14 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  if (data.decisionTimeLeft !== null && data.currentDrawer) {
+  if (data.freeStroke) {
+    // In Free Stroke, allow all players to draw.
+    isFreeStroke = true;
+    isMyTurn = true;
+    // Hide turn prompt and countdown if they are present.
+    turnPrompt.style.display = 'none';
+    drawCountdown.style.display = 'none';
+  } else if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
     // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
@@ -333,7 +341,6 @@ socket.on('turnStarted', (data) => {
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     objectDisplayElem.style.display = 'none';
@@ -443,7 +450,7 @@ function getNormalizedPos(e) {
 }
 
 function startDrawing(e) {
-  if (!isMyTurn) return;
+  if (!isMyTurn && !isFreeStroke) return;
   isDrawing = true;
   currentPath = [];
   const pos = getNormalizedPos(e);
@@ -451,7 +458,7 @@ function startDrawing(e) {
 }
 
 function drawingMove(e) {
-  if (!isMyTurn || !isDrawing) return;
+  if ((!isMyTurn && !isFreeStroke) || !isDrawing) return;
   const pos = getNormalizedPos(e);
   currentPath.push(pos);
   drawStroke({ path: currentPath, color: currentColor, thickness: currentThickness }, true);
@@ -459,7 +466,7 @@ function drawingMove(e) {
 }
 
 function stopDrawing(e) {
-  if (!isMyTurn) return;
+  if (!isMyTurn && !isFreeStroke) return;
   if (isDrawing) {
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
@@ -519,13 +526,13 @@ colorButtons.forEach(btn => {
 });
 
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if (isMyTurn) {
+  if (isMyTurn || isFreeStroke) {
     socket.emit('undo');
     undoLastStroke();
   }
 });
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if (isMyTurn) {
+  if (isMyTurn || isFreeStroke) {
     socket.emit('clear');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
@@ -533,7 +540,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   }
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
-  if (isMyTurn) {
+  if (!isFreeStroke && isMyTurn) {
     socket.emit('giveUp');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];

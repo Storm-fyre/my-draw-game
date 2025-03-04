@@ -161,9 +161,17 @@ io.on('connection', (socket) => {
     socket.lobby = data.lobbyName;
     socket.join(data.lobbyName);
     if (!activeLobbies[data.lobbyName]) {
-      activeLobbies[data.lobbyName] = createLobbyState();
+      if (data.lobbyName === "Free Stroke") {
+        activeLobbies[data.lobbyName] = {
+          players: {},
+          playerOrder: [],
+          chatMessages: [],
+          canvasStrokes: []
+        };
+      } else {
+        activeLobbies[data.lobbyName] = createLobbyState();
+      }
     }
-    socket.emit('lobbyJoined', { lobby: data.lobbyName });
   });
   
   // --- After joining a lobby, set nickname ---
@@ -175,44 +183,61 @@ io.on('connection', (socket) => {
     state.playerOrder.push(socket.id);
     // Broadcast join notification in full uppercase without colon.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
-    socket.emit('init', {
-      players: state.playerOrder.map(id => {
+    
+    if (lobbyName === "Free Stroke") {
+      socket.emit('init', {
+        players: state.playerOrder.map(id => {
+          let player = state.players[id];
+          return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+        }),
+        chatMessages: state.chatMessages,
+        canvasStrokes: state.canvasStrokes,
+        freeStroke: true
+      });
+      io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
         let player = state.players[id];
         return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-      }),
-      chatMessages: [],
-      canvasStrokes: state.canvasStrokes,
-      decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
-      currentDrawer: state.currentDrawer || null,
-      currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname.toUpperCase() : null
-    });
-    io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
-      let player = state.players[id];
-      return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-    }));
-    if (!state.currentDrawer) {
-      state.currentDrawer = socket.id;
-      let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
-      io.to(lobbyName).emit('turnStarted', { 
-        currentDrawer: state.currentDrawer, 
-        duration: DECISION_DURATION,
-        currentDrawerName: currentDrawerName
+      }));
+    } else {
+      socket.emit('init', {
+        players: state.playerOrder.map(id => {
+          let player = state.players[id];
+          return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+        }),
+        chatMessages: [],
+        canvasStrokes: state.canvasStrokes,
+        decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
+        currentDrawer: state.currentDrawer || null,
+        currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname.toUpperCase() : null
       });
-      const options = getRandomObjects(3);
-      io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-      let timeLeft = DECISION_DURATION;
-      state.currentDecisionTimeLeft = timeLeft;
-      state.turnTimer = setInterval(() => {
-        timeLeft--;
+      io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
+        let player = state.players[id];
+        return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+      }));
+      if (!state.currentDrawer) {
+        state.currentDrawer = socket.id;
+        let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
+        io.to(lobbyName).emit('turnStarted', { 
+          currentDrawer: state.currentDrawer, 
+          duration: DECISION_DURATION,
+          currentDrawerName: currentDrawerName
+        });
+        const options = getRandomObjects(3);
+        io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
+        let timeLeft = DECISION_DURATION;
         state.currentDecisionTimeLeft = timeLeft;
-        io.to(lobbyName).emit('turnCountdown', timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(state.turnTimer);
-          state.turnTimer = null;
-          io.to(state.currentDrawer).emit('turnTimeout');
-          startNextTurn(lobbyName);
-        }
-      }, 1000);
+        state.turnTimer = setInterval(() => {
+          timeLeft--;
+          state.currentDecisionTimeLeft = timeLeft;
+          io.to(lobbyName).emit('turnCountdown', timeLeft);
+          if (timeLeft <= 0) {
+            clearInterval(state.turnTimer);
+            state.turnTimer = null;
+            io.to(state.currentDrawer).emit('turnTimeout');
+            startNextTurn(lobbyName);
+          }
+        }, 1000);
+      }
     }
   });
   
@@ -220,6 +245,8 @@ io.on('connection', (socket) => {
   socket.on('objectChosen', (objectChosen) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
+    // In Free Stroke, do nothing (there is no turn/object selection)
+    if (lobbyName === "Free Stroke") return;
     const state = activeLobbies[lobbyName];
     if (socket.id === state.currentDrawer && !state.currentObject) {
       if (state.turnTimer) {
@@ -251,7 +278,7 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (state.currentObject && socket.id !== state.currentDrawer) {
+    if (lobbyName !== "Free Stroke" && state.currentObject && socket.id !== state.currentDrawer) {
       if (!state.guessedCorrectly[socket.id]) {
         const guess = message.trim().toLowerCase();
         const answer = state.currentObject.trim().toLowerCase();
@@ -292,8 +319,12 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (socket.id === state.currentDrawer) {
+    if (lobbyName === "Free Stroke") {
       socket.to(lobbyName).emit('drawing', data);
+    } else {
+      if (socket.id === state.currentDrawer) {
+        socket.to(lobbyName).emit('drawing', data);
+      }
     }
   });
   
@@ -309,8 +340,13 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (socket.id === state.currentDrawer) {
+    if (lobbyName === "Free Stroke") {
+      state.canvasStrokes.pop();
       io.to(lobbyName).emit('undo');
+    } else {
+      if (socket.id === state.currentDrawer) {
+        io.to(lobbyName).emit('undo');
+      }
     }
   });
   
@@ -318,15 +354,21 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (socket.id === state.currentDrawer) {
-      io.to(lobbyName).emit('clearCanvas');
+    if (lobbyName === "Free Stroke") {
       state.canvasStrokes = [];
+      io.to(lobbyName).emit('clearCanvas');
+    } else {
+      if (socket.id === state.currentDrawer) {
+        io.to(lobbyName).emit('clearCanvas');
+        state.canvasStrokes = [];
+      }
     }
   });
   
   socket.on('giveUp', () => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
+    if (lobbyName === "Free Stroke") return; // ignore giveUp in Free Stroke mode
     const state = activeLobbies[lobbyName];
     if (socket.id === state.currentDrawer) {
       if (state.turnTimer) {
@@ -353,7 +395,7 @@ io.on('connection', (socket) => {
         let player = state.players[id];
         return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
       }));
-      if (socket.id === state.currentDrawer) {
+      if (lobbyName !== "Free Stroke" && socket.id === state.currentDrawer) {
         startNextTurn(lobbyName);
       }
     }
