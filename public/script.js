@@ -1,7 +1,6 @@
 const socket = io();
 
 let nickname = "";
-let currentLobbyName = "";
 let isDrawing = false;
 let currentPath = [];
 let paths = []; // stored complete strokes
@@ -55,7 +54,6 @@ joinBtn.addEventListener('click', () => {
           btn.textContent = lobbyName;
           if (lobbyPasscode === "") {
             btn.addEventListener('click', () => {
-              currentLobbyName = lobbyName;
               socket.emit('joinLobby', { lobbyName: lobbyName, passcode: "" });
             });
           } else {
@@ -75,7 +73,6 @@ joinBtn.addEventListener('click', () => {
 
 joinLobbyBtn.addEventListener('click', () => {
   const lobbyName = selectedLobbyNameElem.getAttribute('data-lobby');
-  currentLobbyName = lobbyName;
   const passcode = lobbyPasscodeInput.value.trim();
   if(lobbyName && passcode) {
     socket.emit('joinLobby', { lobbyName, passcode });
@@ -277,18 +274,12 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  // If Free Stroke lobby, enable drawing for everyone
-  if (currentLobbyName === "Free Stroke") {
-    isMyTurn = true;
-    turnPrompt.style.display = 'none';
-    drawControlsDiv.style.display = 'block';
-  } else {
-    if (data.decisionTimeLeft !== null && data.currentDrawer) {
-      turnPrompt.style.display = 'flex';
-      promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
-      turnOptionsDiv.innerHTML = "";
-      countdownDisplay.textContent = data.decisionTimeLeft;
-    }
+  if (data.decisionTimeLeft !== null && data.currentDrawer) {
+    turnPrompt.style.display = 'flex';
+    // For non-drawing players, show only the uppercase name and countdown.
+    promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
+    turnOptionsDiv.innerHTML = "";
+    countdownDisplay.textContent = data.decisionTimeLeft;
   }
 });
 
@@ -316,9 +307,15 @@ socket.on('clearCanvas', () => {
   currentRemoteStroke = null;
 });
 
-// Ignore turn-related events in Free Stroke lobby
+socket.on('undo', () => { undoLastStroke(); });
+
+// Turn and object selection events
+const turnPrompt = document.getElementById('turnPrompt');
+const promptText = document.getElementById('promptText');
+const turnOptionsDiv = document.getElementById('turnOptions');
+const countdownDisplay = document.getElementById('countdownDisplay');
+
 socket.on('turnStarted', (data) => {
-  if(currentLobbyName === "Free Stroke") return;
   if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
@@ -336,6 +333,7 @@ socket.on('turnStarted', (data) => {
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'flex';
+    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     objectDisplayElem.style.display = 'none';
@@ -345,14 +343,12 @@ socket.on('turnStarted', (data) => {
 });
 
 socket.on('turnCountdown', (timeLeft) => {
-  if(currentLobbyName === "Free Stroke") return;
   if (turnPrompt.style.display !== 'none') {
     countdownDisplay.textContent = timeLeft;
   }
 });
 
 socket.on('turnTimeout', () => {
-  if(currentLobbyName === "Free Stroke") return;
   turnPrompt.style.display = 'none';
   isMyTurn = false;
   objectDisplayElem.style.display = 'none';
@@ -360,7 +356,6 @@ socket.on('turnTimeout', () => {
 });
 
 socket.on('objectSelection', (data) => {
-  if(currentLobbyName === "Free Stroke") return;
   if (data.options && data.options.length > 0) {
     isMyTurn = true;
     turnPrompt.style.display = 'flex';
@@ -380,7 +375,6 @@ socket.on('objectSelection', (data) => {
 });
 
 socket.on('objectChosenBroadcast', (data) => {
-  if(currentLobbyName === "Free Stroke") return;
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
@@ -392,7 +386,6 @@ socket.on('objectChosenBroadcast', (data) => {
 });
 
 socket.on('drawPhaseStarted', (data) => {
-  if(currentLobbyName === "Free Stroke") return;
   if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'none';
@@ -422,14 +415,12 @@ socket.on('drawPhaseStarted', (data) => {
 });
 
 socket.on('drawPhaseCountdown', (timeLeft) => {
-  if(currentLobbyName === "Free Stroke") return;
   currentDrawTime = timeLeft;
   drawCountdown.textContent = timeLeft;
   updateDashHint();
 });
 
 socket.on('drawPhaseTimeout', () => {
-  if(currentLobbyName === "Free Stroke") return;
   drawCountdown.style.display = 'none';
   isMyTurn = false;
   dashHintDiv.textContent = "";
