@@ -22,9 +22,6 @@ let isChatView = true;
 // Flag for keyboard activity
 let isKeyboardActive = false;
 
-// **New flag for Free Stroke mode**
-let isFreeStroke = false;
-
 // Timer for clearing object display after drawing phase (70 sec)
 let drawPhaseObjectTimer = null;
 
@@ -201,16 +198,19 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
+  // If nickname is non-empty, display with colon; otherwise, show only the message.
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
     p.textContent = data.message;
   }
+  // Insert new message at the top.
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
+  // Keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -272,14 +272,9 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  if (data.freeDraw) {
-    isFreeStroke = true;
-    // In free draw mode, hide turn prompts and show drawing controls for all.
-    document.getElementById('turnPrompt').style.display = 'none';
-    drawCountdown.style.display = 'none';
-    drawControlsDiv.style.display = 'block';
-  } else if (data.decisionTimeLeft !== null && data.currentDrawer) {
-    document.getElementById('turnPrompt').style.display = 'flex';
+  if (data.decisionTimeLeft !== null && data.currentDrawer) {
+    turnPrompt.style.display = 'flex';
+    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     countdownDisplay.textContent = data.decisionTimeLeft;
@@ -290,16 +285,18 @@ socket.on('chatMessage', (data) => { addChatMessage(data); });
 socket.on('updatePlayers', (playersArr) => { updatePlayerList(playersArr); });
 
 socket.on('drawing', (data) => {
-  if (!isMyTurn && !isFreeStroke) return;
-  currentRemoteStroke = data;
-  redrawStrokes();
+  if (!isMyTurn) {
+    currentRemoteStroke = data;
+    redrawStrokes();
+  }
 });
 
 socket.on('strokeComplete', (data) => {
-  if (!isMyTurn && !isFreeStroke) return;
-  paths.push(data);
-  currentRemoteStroke = null;
-  redrawStrokes();
+  if (!isMyTurn) {
+    paths.push(data);
+    currentRemoteStroke = null;
+    redrawStrokes();
+  }
 });
 
 socket.on('clearCanvas', () => {
@@ -334,6 +331,7 @@ socket.on('turnStarted', (data) => {
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'flex';
+    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     objectDisplayElem.style.display = 'none';
@@ -429,7 +427,6 @@ socket.on('drawPhaseTimeout', () => {
   if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
 });
 
-// Modified drawing functions to allow drawing in Free Stroke mode
 function getNormalizedPos(e) {
   const rect = canvas.getBoundingClientRect();
   let x, y;
@@ -444,8 +441,7 @@ function getNormalizedPos(e) {
 }
 
 function startDrawing(e) {
-  // Allow drawing if it's your turn or if in Free Stroke mode
-  if (!isMyTurn && !isFreeStroke) return;
+  if (!isMyTurn) return;
   isDrawing = true;
   currentPath = [];
   const pos = getNormalizedPos(e);
@@ -453,7 +449,7 @@ function startDrawing(e) {
 }
 
 function drawingMove(e) {
-  if ((!isMyTurn && !isFreeStroke) || !isDrawing) return;
+  if (!isMyTurn || !isDrawing) return;
   const pos = getNormalizedPos(e);
   currentPath.push(pos);
   drawStroke({ path: currentPath, color: currentColor, thickness: currentThickness }, true);
@@ -461,7 +457,7 @@ function drawingMove(e) {
 }
 
 function stopDrawing(e) {
-  if (!isMyTurn && !isFreeStroke) return;
+  if (!isMyTurn) return;
   if (isDrawing) {
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
@@ -520,24 +516,20 @@ colorButtons.forEach(btn => {
   });
 });
 
-// Allow Undo in game or Free Stroke mode
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if (isMyTurn || isFreeStroke) {
+  if (isMyTurn) {
     socket.emit('undo');
     undoLastStroke();
   }
 });
-
-// Allow Clear in game or Free Stroke mode
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if (isMyTurn || isFreeStroke) {
+  if (isMyTurn) {
     socket.emit('clear');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
     currentRemoteStroke = null;
   }
 });
-
 document.getElementById('giveUpBtn').addEventListener('click', () => {
   if (isMyTurn) {
     socket.emit('giveUp');
