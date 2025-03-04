@@ -38,12 +38,6 @@ const selectedLobbyNameElem = document.getElementById('selectedLobbyName');
 const lobbyPasscodeInput = document.getElementById('lobbyPasscodeInput');
 const joinLobbyBtn = document.getElementById('joinLobbyBtn');
 
-// --- Turn and Object Selection Elements (restored from original code) ---
-const turnPrompt = document.getElementById('turnPrompt');
-const promptText = document.getElementById('promptText');
-const turnOptionsDiv = document.getElementById('turnOptions');
-const countdownDisplay = document.getElementById('countdownDisplay');
-
 // --- After entering nickname, show lobby selection ---
 joinBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
