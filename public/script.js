@@ -1,6 +1,7 @@
 const socket = io();
 
 let nickname = "";
+let currentLobbyName = "";
 let isDrawing = false;
 let currentPath = [];
 let paths = []; // stored complete strokes
@@ -8,7 +9,6 @@ let currentColor = "#000000";
 // Default thickness is now 2px.
 let currentThickness = 2;
 let isMyTurn = false;
-let isFreeStroke = false; // Flag for Free Stroke lobby
 
 // For non-drawing players: store current remote stroke
 let currentRemoteStroke = null;
@@ -38,6 +38,12 @@ const selectedLobbyNameElem = document.getElementById('selectedLobbyName');
 const lobbyPasscodeInput = document.getElementById('lobbyPasscodeInput');
 const joinLobbyBtn = document.getElementById('joinLobbyBtn');
 
+// --- Turn and Object Selection Elements (restored from original code) ---
+const turnPrompt = document.getElementById('turnPrompt');
+const promptText = document.getElementById('promptText');
+const turnOptionsDiv = document.getElementById('turnOptions');
+const countdownDisplay = document.getElementById('countdownDisplay');
+
 // --- After entering nickname, show lobby selection ---
 joinBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
@@ -55,6 +61,7 @@ joinBtn.addEventListener('click', () => {
           btn.textContent = lobbyName;
           if (lobbyPasscode === "") {
             btn.addEventListener('click', () => {
+              currentLobbyName = lobbyName;
               socket.emit('joinLobby', { lobbyName: lobbyName, passcode: "" });
             });
           } else {
@@ -74,6 +81,7 @@ joinBtn.addEventListener('click', () => {
 
 joinLobbyBtn.addEventListener('click', () => {
   const lobbyName = selectedLobbyNameElem.getAttribute('data-lobby');
+  currentLobbyName = lobbyName;
   const passcode = lobbyPasscodeInput.value.trim();
   if(lobbyName && passcode) {
     socket.emit('joinLobby', { lobbyName, passcode });
@@ -275,19 +283,18 @@ socket.on('init', (data) => {
     paths = data.canvasStrokes;
     redrawStrokes();
   }
-  if (data.freeStroke) {
-    // In Free Stroke, allow all players to draw.
-    isFreeStroke = true;
+  // If Free Stroke lobby, enable drawing for everyone
+  if (currentLobbyName === "Free Stroke") {
     isMyTurn = true;
-    // Hide turn prompt and countdown if they are present.
     turnPrompt.style.display = 'none';
-    drawCountdown.style.display = 'none';
-  } else if (data.decisionTimeLeft !== null && data.currentDrawer) {
-    turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
-    promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
-    turnOptionsDiv.innerHTML = "";
-    countdownDisplay.textContent = data.decisionTimeLeft;
+    drawControlsDiv.style.display = 'block';
+  } else {
+    if (data.decisionTimeLeft !== null && data.currentDrawer) {
+      turnPrompt.style.display = 'flex';
+      promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
+      turnOptionsDiv.innerHTML = "";
+      countdownDisplay.textContent = data.decisionTimeLeft;
+    }
   }
 });
 
@@ -315,15 +322,9 @@ socket.on('clearCanvas', () => {
   currentRemoteStroke = null;
 });
 
-socket.on('undo', () => { undoLastStroke(); });
-
-// Turn and object selection events
-const turnPrompt = document.getElementById('turnPrompt');
-const promptText = document.getElementById('promptText');
-const turnOptionsDiv = document.getElementById('turnOptions');
-const countdownDisplay = document.getElementById('countdownDisplay');
-
+// Ignore turn-related events in Free Stroke lobby
 socket.on('turnStarted', (data) => {
+  if(currentLobbyName === "Free Stroke") return;
   if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
@@ -350,12 +351,14 @@ socket.on('turnStarted', (data) => {
 });
 
 socket.on('turnCountdown', (timeLeft) => {
+  if(currentLobbyName === "Free Stroke") return;
   if (turnPrompt.style.display !== 'none') {
     countdownDisplay.textContent = timeLeft;
   }
 });
 
 socket.on('turnTimeout', () => {
+  if(currentLobbyName === "Free Stroke") return;
   turnPrompt.style.display = 'none';
   isMyTurn = false;
   objectDisplayElem.style.display = 'none';
@@ -363,6 +366,7 @@ socket.on('turnTimeout', () => {
 });
 
 socket.on('objectSelection', (data) => {
+  if(currentLobbyName === "Free Stroke") return;
   if (data.options && data.options.length > 0) {
     isMyTurn = true;
     turnPrompt.style.display = 'flex';
@@ -382,6 +386,7 @@ socket.on('objectSelection', (data) => {
 });
 
 socket.on('objectChosenBroadcast', (data) => {
+  if(currentLobbyName === "Free Stroke") return;
   currentObjectStr = data.object;
   currentDrawTime = DRAW_DURATION;
   updateDashHint();
@@ -393,6 +398,7 @@ socket.on('objectChosenBroadcast', (data) => {
 });
 
 socket.on('drawPhaseStarted', (data) => {
+  if(currentLobbyName === "Free Stroke") return;
   if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     turnPrompt.style.display = 'none';
@@ -422,12 +428,14 @@ socket.on('drawPhaseStarted', (data) => {
 });
 
 socket.on('drawPhaseCountdown', (timeLeft) => {
+  if(currentLobbyName === "Free Stroke") return;
   currentDrawTime = timeLeft;
   drawCountdown.textContent = timeLeft;
   updateDashHint();
 });
 
 socket.on('drawPhaseTimeout', () => {
+  if(currentLobbyName === "Free Stroke") return;
   drawCountdown.style.display = 'none';
   isMyTurn = false;
   dashHintDiv.textContent = "";
@@ -450,7 +458,7 @@ function getNormalizedPos(e) {
 }
 
 function startDrawing(e) {
-  if (!isMyTurn && !isFreeStroke) return;
+  if (!isMyTurn) return;
   isDrawing = true;
   currentPath = [];
   const pos = getNormalizedPos(e);
@@ -458,7 +466,7 @@ function startDrawing(e) {
 }
 
 function drawingMove(e) {
-  if ((!isMyTurn && !isFreeStroke) || !isDrawing) return;
+  if (!isMyTurn || !isDrawing) return;
   const pos = getNormalizedPos(e);
   currentPath.push(pos);
   drawStroke({ path: currentPath, color: currentColor, thickness: currentThickness }, true);
@@ -466,7 +474,7 @@ function drawingMove(e) {
 }
 
 function stopDrawing(e) {
-  if (!isMyTurn && !isFreeStroke) return;
+  if (!isMyTurn) return;
   if (isDrawing) {
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
@@ -526,13 +534,13 @@ colorButtons.forEach(btn => {
 });
 
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if (isMyTurn || isFreeStroke) {
+  if (isMyTurn) {
     socket.emit('undo');
     undoLastStroke();
   }
 });
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if (isMyTurn || isFreeStroke) {
+  if (isMyTurn) {
     socket.emit('clear');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
@@ -540,7 +548,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   }
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
-  if (!isFreeStroke && isMyTurn) {
+  if (isMyTurn) {
     socket.emit('giveUp');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paths = [];
