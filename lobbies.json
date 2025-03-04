@@ -1,4 +1,5 @@
 [
-  { "name": "Sunny", "passcode": "" },
-  { "name": "SSARAAA", "passcode": "vincent" }
+  { "Sunny": "" },
+  { "SSARAAA": "vincent" },
+  { "Free Stroke": "china blue"}
 ]

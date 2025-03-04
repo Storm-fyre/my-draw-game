@@ -145,8 +145,16 @@ io.on('connection', (socket) => {
   
   // --- Lobby joining ---
   socket.on('joinLobby', (data) => {
-    const lobbyEntry = lobbyInfo.find(l => l.name === data.lobbyName);
-    if (!lobbyEntry || (lobbyEntry.passcode && lobbyEntry.passcode !== data.passcode)) {
+    const lobbyEntry = lobbyInfo.find(lobby => {
+      const lobbyName = Object.keys(lobby)[0];
+      return lobbyName === data.lobbyName;
+    });
+    if (!lobbyEntry) {
+      socket.emit('lobbyError', { message: 'Invalid lobby or passcode.' });
+      return;
+    }
+    const passcode = lobbyEntry[Object.keys(lobbyEntry)[0]];
+    if (passcode && passcode !== data.passcode) {
       socket.emit('lobbyError', { message: 'Invalid lobby or passcode.' });
       return;
     }
@@ -335,6 +343,10 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (lobbyName && activeLobbies[lobbyName]) {
       const state = activeLobbies[lobbyName];
+      const player = state.players[socket.id];
+      if (player) {
+        io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${player.nickname.toUpperCase()} LEFT` });
+      }
       delete state.players[socket.id];
       state.playerOrder = state.playerOrder.filter(id => id !== socket.id);
       io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {

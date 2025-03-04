@@ -48,18 +48,20 @@ joinBtn.addEventListener('click', () => {
       .then(data => {
         lobbyButtonsDiv.innerHTML = '';
         data.forEach(lobby => {
+          const lobbyName = Object.keys(lobby)[0];
+          const lobbyPasscode = lobby[lobbyName];
           const btn = document.createElement('button');
-          btn.textContent = lobby.name;
-          if (lobby.passcode === "") {
+          btn.textContent = lobbyName;
+          if (lobbyPasscode === "") {
             btn.addEventListener('click', () => {
-              socket.emit('joinLobby', { lobbyName: lobby.name, passcode: "" });
+              socket.emit('joinLobby', { lobbyName: lobbyName, passcode: "" });
             });
           } else {
             btn.addEventListener('click', () => {
               lobbyButtonsDiv.style.display = 'none';
               lobbyPasscodeContainer.style.display = 'block';
-              selectedLobbyNameElem.textContent = lobby.name;
-              selectedLobbyNameElem.setAttribute('data-lobby', lobby.name);
+              selectedLobbyNameElem.textContent = lobbyName;
+              selectedLobbyNameElem.setAttribute('data-lobby', lobbyName);
             });
           }
           lobbyButtonsDiv.appendChild(btn);
