@@ -5,29 +5,25 @@ let isDrawing = false;
 let currentPath = [];
 let paths = []; // stored complete strokes
 let currentColor = "#000000";
-// Default thickness is now 2px.
 let currentThickness = 2;
-// In normal game mode, isMyTurn determines if the player can draw.
-// In Free Canvas mode, all players can draw.
+// In normal mode, isMyTurn indicates turn; in Free Canvas mode, all can draw.
 let isMyTurn = false;
 
 // For non-drawing players: store current remote stroke
 let currentRemoteStroke = null;
 
-// For dash hint (object reveal)
+// For dash hint (only used in normal mode)
 let currentObjectStr = null;
 let currentDrawTime = null;
 
-// Flag to track current view (true = Chat, false = Players)
+// Flags for view and keyboard
 let isChatView = true;
-
-// Flag for keyboard activity
 let isKeyboardActive = false;
 
-// Timer for clearing object display after drawing phase (70 sec)
+// Timer for clearing object display
 let drawPhaseObjectTimer = null;
 
-// Current game mode/cluster (default from server is from init event)
+// Current game mode (either a cluster name or "Free Canvas")
 let currentMode = "superhero";
 
 // --- Modal Elements ---
@@ -42,7 +38,7 @@ const selectedLobbyNameElem = document.getElementById('selectedLobbyName');
 const lobbyPasscodeInput = document.getElementById('lobbyPasscodeInput');
 const joinLobbyBtn = document.getElementById('joinLobbyBtn');
 
-// --- After entering nickname, show lobby selection ---
+// --- After entering nickname ---
 joinBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
   if(name) {
@@ -99,7 +95,7 @@ socket.on('lobbyError', (data) => {
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
-// drawControlsDiv remains always visible so that Change Game button stays in place.
+// drawControlsDiv always remains visible so that Change Game button stays in place.
 const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
@@ -110,7 +106,7 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Adjust layout when keyboard is active.
+// Adjust layout for keyboard activity.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -202,11 +198,7 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  if (data.nickname && data.nickname.trim() !== "") {
-    p.textContent = `${data.nickname}: ${data.message}`;
-  } else {
-    p.textContent = data.message;
-  }
+  p.textContent = data.nickname && data.nickname.trim() !== "" ? `${data.nickname}: ${data.message}` : data.message;
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
@@ -225,9 +217,17 @@ function updatePlayerList(playersArr) {
     pElem.textContent = `${p.rank}. ${p.nickname} (${p.score})`;
     playerBox.appendChild(pElem);
   });
+  // If only one player, hide Give Up and Change Game buttons.
+  if (playersArr.length === 1) {
+    document.getElementById('giveUpBtn').style.display = 'none';
+    document.getElementById('changeGameBtn').style.display = 'none';
+  } else {
+    document.getElementById('changeGameBtn').style.display = 'inline-block';
+    // The visibility of Give Up will be set in turn events.
+  }
 }
 
-// --- Dash hint update function ---
+// --- Dash hint update (normal mode only) ---
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -274,12 +274,11 @@ socket.on('init', (data) => {
     redrawStrokes();
   }
   currentMode = data.mode;
-  // In Free Canvas mode, let everyone draw.
+  // In Free Canvas mode, allow drawing for everyone and hide turn UI.
   if (currentMode === "Free Canvas") {
     isMyTurn = true;
     turnPrompt.style.display = 'none';
-  }
-  else if (data.decisionTimeLeft !== null && data.currentDrawer) {
+  } else if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
@@ -291,7 +290,6 @@ socket.on('chatMessage', (data) => { addChatMessage(data); });
 socket.on('updatePlayers', (playersArr) => { updatePlayerList(playersArr); });
 
 socket.on('drawing', (data) => {
-  // In Free Canvas mode, or if not drawing yourself, update remote stroke.
   if (currentMode === "Free Canvas" || !isMyTurn) {
     currentRemoteStroke = data;
     redrawStrokes();
@@ -312,7 +310,10 @@ socket.on('clearCanvas', () => {
   currentRemoteStroke = null;
 });
 
-// Turn and object selection events (ignored in Free Canvas mode)
+// In response to an undo event from server, remove last stroke locally.
+socket.on('undo', () => { undoLastStroke(); });
+
+// Turn and object selection events (ignored in Free Canvas)
 const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const turnOptionsDiv = document.getElementById('turnOptions');
@@ -342,7 +343,7 @@ socket.on('turnStarted', (data) => {
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
   }
-  // Always show Change Game button. Toggle other buttons based on turn.
+  // Always show Change Game button.
   if (data.currentDrawer === socket.id) {
     document.getElementById('undoBtn').style.display = 'inline-block';
     document.getElementById('clearBtn').style.display = 'inline-block';
@@ -482,14 +483,13 @@ changeGameBtn.addEventListener('click', () => {
   }
 });
 
-// Listen for gameChanged event from server to update current mode.
 socket.on('gameChanged', (data) => {
   currentMode = data.newCluster;
-  // Immediately clear any turn UI.
+  // Immediately clear turn UI.
   turnPrompt.style.display = 'none';
   drawCountdown.style.display = 'none';
   objectDisplayElem.style.display = 'none';
-  // In Free Canvas mode, enable drawing for all and hide "Give Up" button.
+  // In Free Canvas mode, allow drawing for all and hide "Give Up" button.
   if (currentMode === "Free Canvas") {
     isMyTurn = true;
     document.getElementById('giveUpBtn').style.display = 'none';
@@ -518,7 +518,6 @@ function getNormalizedPos(e) {
   return { x: x / canvas.width, y: y / canvas.height };
 }
 
-// In startDrawing, allow drawing if in Free Canvas mode or if it's your turn.
 function startDrawing(e) {
   if (currentMode !== "Free Canvas" && !isMyTurn) return;
   isDrawing = true;
@@ -605,7 +604,6 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   currentRemoteStroke = null;
 });
 document.getElementById('giveUpBtn').addEventListener('click', () => {
-  // In Free Canvas mode, "Give Up" is not applicable.
   if (currentMode !== "Free Canvas") {
     socket.emit('giveUp');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
