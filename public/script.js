@@ -544,6 +544,9 @@ function stopDrawing(e) {
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
     socket.emit('strokeComplete', stroke);
+    // Ensure the drawing player's canvas updates immediately,
+    // so even a tap (single point) will be drawn as a dot.
+    redrawStrokes();
   }
   isDrawing = false;
 }
