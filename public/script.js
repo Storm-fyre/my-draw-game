@@ -16,13 +16,16 @@ let currentRemoteStroke = null;
 let currentObjectStr = null;
 let currentDrawTime = null;
 
+// Global variable to store current drawer’s uppercase name
+let globalDrawerName = "";
+
 // Flag to track current view (true = Chat, false = Players)
 let isChatView = true;
 
 // Flag for keyboard activity
 let isKeyboardActive = false;
 
-// Timer for clearing object display after drawing phase (70 sec)
+// Timer for clearing object display/dash hints after drawing phase (70 sec)
 let drawPhaseObjectTimer = null;
 
 // Current game cluster (default from server is "superhero")
@@ -96,8 +99,8 @@ socket.on('lobbyError', (data) => {
 // --- Canvas setup ---
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
+// The dash hint element is now positioned at the bottom via CSS.
 const dashHintDiv = document.getElementById('dashHint');
-// drawControlsDiv now always remains visible (its inner buttons will be toggled)
 const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
@@ -204,7 +207,9 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  // If nickname is non-empty, display with colon; otherwise, show only the message.
+  // Use a slightly reduced font size and add a bottom margin for a one-line gap.
+  p.style.fontSize = "14px";
+  p.style.marginBottom = "1em";
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
@@ -215,11 +220,6 @@ function addChatMessage(data) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
-  }
-  // Keep only the last 30 messages.
-  const messages = chatBox.querySelectorAll('p');
-  while (messages.length > 30) {
-    chatBox.removeChild(messages[messages.length - 1]);
   }
 }
 
@@ -232,7 +232,9 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (handles only 1-word and 2-word objects)
+// --- Dash hint update function ---
+// For one-word objects, the dash hints are constructed as before (but font size is reduced via CSS).
+// For two-word objects, join the hints with a " --- " gap.
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -265,13 +267,19 @@ function updateDashHint() {
     for (let i = 0; i < word2.length; i++) {
       disp2 += (i < r2.length ? word2.charAt(i) : "_") + " ";
     }
+    // Join the two hints with a gap of three dashes.
     hintWords.push(disp1.trim());
     hintWords.push(disp2.trim());
   }
-  dashHintDiv.textContent = hintWords.join("    ");
+  if (hintWords.length === 2) {
+    dashHintDiv.textContent = hintWords.join(" --- ");
+  } else {
+    dashHintDiv.textContent = hintWords.join(" ");
+  }
 }
 
 // --- Socket events ---
+
 socket.on('init', (data) => {
   updatePlayerList(data.players);
   if (data.canvasStrokes) {
@@ -280,11 +288,12 @@ socket.on('init', (data) => {
   }
   if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     countdownDisplay.textContent = data.decisionTimeLeft;
   }
+  // Store the drawer’s name globally
+  globalDrawerName = data.currentDrawerName || "";
 });
 
 socket.on('chatMessage', (data) => { addChatMessage(data); });
@@ -320,6 +329,7 @@ const turnOptionsDiv = document.getElementById('turnOptions');
 const countdownDisplay = document.getElementById('countdownDisplay');
 
 socket.on('turnStarted', (data) => {
+  globalDrawerName = data.currentDrawerName; // update global drawer name
   if (data.currentDrawer === socket.id) {
     isMyTurn = true;
     dashHintDiv.textContent = "";
@@ -328,11 +338,6 @@ socket.on('turnStarted', (data) => {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
       objectDisplayElem.style.fontSize = "14px";
-      if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
-      drawPhaseObjectTimer = setTimeout(() => {
-        objectDisplayElem.style.display = 'none';
-        objectDisplayElem.textContent = '';
-      }, 70000);
     }
   } else {
     isMyTurn = false;
@@ -342,7 +347,6 @@ socket.on('turnStarted', (data) => {
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
   }
-  // Always show the change game button; toggle action buttons based on turn.
   drawControlsDiv.style.display = 'block';
   if (data.currentDrawer === socket.id) {
     document.getElementById('undoBtn').style.display = 'inline-block';
@@ -398,6 +402,8 @@ socket.on('objectChosenBroadcast', (data) => {
   }
 });
 
+// Updated drawPhaseStarted event to set a timer that clears dash hints and object display after 70 seconds,
+// and then posts a system message (e.g., "ROCKY IS DRAWING BOTTLE").
 socket.on('drawPhaseStarted', (data) => {
   if (data.currentDrawer === socket.id) {
     isMyTurn = true;
@@ -417,6 +423,8 @@ socket.on('drawPhaseStarted', (data) => {
       drawPhaseObjectTimer = setTimeout(() => {
         objectDisplayElem.style.display = 'none';
         objectDisplayElem.textContent = '';
+        dashHintDiv.textContent = '';
+        addChatMessage({nickname:"", message: `${globalDrawerName} IS DRAWING ${currentObjectStr.toUpperCase()}`});
       }, 70000);
     }
   } else {
@@ -424,13 +432,17 @@ socket.on('drawPhaseStarted', (data) => {
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
-    // Always show change game button even for non-drawers.
     drawControlsDiv.style.display = 'block';
     document.getElementById('undoBtn').style.display = 'none';
     document.getElementById('clearBtn').style.display = 'none';
     document.getElementById('giveUpBtn').style.display = 'none';
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
+    if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
+    drawPhaseObjectTimer = setTimeout(() => {
+      dashHintDiv.textContent = '';
+      addChatMessage({nickname:"", message: `${globalDrawerName} IS DRAWING ${currentObjectStr.toUpperCase()}`});
+    }, 70000);
   }
 });
 
@@ -454,16 +466,12 @@ const changeGameBtn = document.getElementById('changeGameBtn');
 const changeGameDropdown = document.getElementById('changeGameDropdown');
 
 changeGameBtn.addEventListener('click', () => {
-  // Toggle dropdown visibility
   if (changeGameDropdown.style.display === 'none' || changeGameDropdown.style.display === '') {
-    // Fetch clusters from server
     fetch('/clusters')
       .then(res => res.json())
       .then(clusters => {
-        // Clear existing options
         changeGameDropdown.innerHTML = '';
         clusters.forEach(cluster => {
-          // Create a button for each cluster
           let btn = document.createElement('button');
           btn.textContent = cluster;
           btn.style.width = '100%';
@@ -472,12 +480,10 @@ changeGameBtn.addEventListener('click', () => {
           btn.style.background = 'none';
           btn.style.textAlign = 'left';
           btn.addEventListener('click', () => {
-            // If selected cluster is same as current, do nothing
             if (cluster === currentCluster) {
               changeGameDropdown.style.display = 'none';
               return;
             }
-            // Emit changeGameRequest event
             socket.emit('changeGameRequest', { newCluster: cluster });
             changeGameDropdown.style.display = 'none';
           });
@@ -490,16 +496,13 @@ changeGameBtn.addEventListener('click', () => {
   }
 });
 
-// Listen for gameChanged event from server to update current cluster and clear current turn UI.
 socket.on('gameChanged', (data) => {
   currentCluster = data.newCluster;
-  // Immediately clear any turn UI
   turnPrompt.style.display = 'none';
   drawCountdown.style.display = 'none';
   objectDisplayElem.style.display = 'none';
 });
 
-// Listen for canvasMessage event to display a message overlay on canvas
 socket.on('canvasMessage', (data) => {
   const canvasMessageElem = document.getElementById('canvasMessage');
   canvasMessageElem.textContent = data.message;
@@ -544,8 +547,6 @@ function stopDrawing(e) {
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
     socket.emit('strokeComplete', stroke);
-    // Ensure the drawing player's canvas updates immediately,
-    // so even a tap (single point) will be drawn as a dot.
     redrawStrokes();
   }
   isDrawing = false;
@@ -570,7 +571,6 @@ function drawStroke(data, emitLocal) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   if (data.path.length === 1) {
-    // Handle tap by drawing a dot
     const pt = data.path[0];
     const x = pt.x * canvas.width;
     const y = pt.y * canvas.height;
