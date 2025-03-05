@@ -296,8 +296,9 @@ socket.on('init', (data) => {
   globalDrawerName = data.currentDrawerName || "";
 });
 
+// Updated freeCanvasMode event: allow drawing in Free Canvas mode.
 socket.on('freeCanvasMode', (data) => {
-  isMyTurn = false; // no turns in Free Canvas mode
+  isMyTurn = true; // Allow drawing for everyone in Free Canvas mode
   turnPrompt.style.display = 'none';
   drawCountdown.style.display = 'none';
   objectDisplayElem.style.display = 'none';
@@ -321,11 +322,19 @@ socket.on('drawing', (data) => {
   if (!isMyTurn) {
     currentRemoteStroke = data;
     redrawStrokes();
+  } else {
+    // In Free Canvas mode (or turn mode), update the canvas for non-local drawing.
+    currentRemoteStroke = data;
+    redrawStrokes();
   }
 });
 
 socket.on('strokeComplete', (data) => {
   if (!isMyTurn) {
+    paths.push(data);
+    currentRemoteStroke = null;
+    redrawStrokes();
+  } else {
     paths.push(data);
     currentRemoteStroke = null;
     redrawStrokes();

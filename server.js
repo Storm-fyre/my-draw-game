@@ -388,7 +388,8 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (socket.id === state.currentDrawer) {
+    // In Free Canvas mode, allow drawing from any player.
+    if (state.currentCluster === "Free Canvas" || socket.id === state.currentDrawer) {
       socket.to(lobbyName).emit('drawing', data);
     }
   });
@@ -405,7 +406,8 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (socket.id === state.currentDrawer) {
+    // Allow undo from any player in Free Canvas mode.
+    if (state.currentCluster === "Free Canvas" || socket.id === state.currentDrawer) {
       io.to(lobbyName).emit('undo');
     }
   });
@@ -414,7 +416,8 @@ io.on('connection', (socket) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (socket.id === state.currentDrawer) {
+    // Allow clear from any player in Free Canvas mode.
+    if (state.currentCluster === "Free Canvas" || socket.id === state.currentDrawer) {
       io.to(lobbyName).emit('clearCanvas');
       state.canvasStrokes = [];
     }
