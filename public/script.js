@@ -97,7 +97,6 @@ socket.on('lobbyError', (data) => {
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
-// drawControlsDiv now always remains visible (its inner buttons will be toggled)
 const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
@@ -108,7 +107,6 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Adjust layout when keyboard is active.
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -116,19 +114,15 @@ function adjustLayoutForKeyboard(active) {
   const toolsBar = document.getElementById('toolsBar');
   if (active) {
     isKeyboardActive = true;
-    // Switch to horizontal layout.
     gameContainer.style.flexDirection = 'row';
     canvasContainer.style.width = '75%';
     let newWidth = gameContainer.clientWidth * 0.75;
     canvas.width = newWidth;
-    canvas.height = newWidth; // square canvas
+    canvas.height = newWidth;
     canvasContainer.style.height = newWidth + "px";
-    // Message box takes 25% of width and height equals canvas height.
     boxContainer.style.width = '25%';
     boxContainer.style.height = newWidth + "px";
-    // Hide tools section.
     toolsBar.style.display = 'none';
-    // Change chat input placeholder.
     chatInput.placeholder = "Type:";
     redrawStrokes();
   } else {
@@ -204,19 +198,16 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  // If nickname is non-empty, display with colon; otherwise, show only the message.
   if (data.nickname && data.nickname.trim() !== "") {
     p.textContent = `${data.nickname}: ${data.message}`;
   } else {
     p.textContent = data.message;
   }
-  // Insert new message at the top.
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
     chatBox.appendChild(p);
   }
-  // Keep only the last 30 messages.
   const messages = chatBox.querySelectorAll('p');
   while (messages.length > 30) {
     chatBox.removeChild(messages[messages.length - 1]);
@@ -232,7 +223,6 @@ function updatePlayerList(playersArr) {
   });
 }
 
-// --- Dash hint update function --- (handles only 1-word and 2-word objects)
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -280,7 +270,6 @@ socket.on('init', (data) => {
   }
   if (data.decisionTimeLeft !== null && data.currentDrawer) {
     turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     countdownDisplay.textContent = data.decisionTimeLeft;
@@ -313,7 +302,6 @@ socket.on('clearCanvas', () => {
 
 socket.on('undo', () => { undoLastStroke(); });
 
-// Turn and object selection events
 const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const turnOptionsDiv = document.getElementById('turnOptions');
@@ -342,7 +330,6 @@ socket.on('turnStarted', (data) => {
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
   }
-  // Always show the change game button; toggle action buttons based on turn.
   drawControlsDiv.style.display = 'block';
   if (data.currentDrawer === socket.id) {
     document.getElementById('undoBtn').style.display = 'inline-block';
@@ -424,7 +411,6 @@ socket.on('drawPhaseStarted', (data) => {
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
-    // Always show change game button even for non-drawers.
     drawControlsDiv.style.display = 'block';
     document.getElementById('undoBtn').style.display = 'none';
     document.getElementById('clearBtn').style.display = 'none';
@@ -449,57 +435,13 @@ socket.on('drawPhaseTimeout', () => {
   if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
 });
 
-// --- Change Game Dropdown functionality ---
-const changeGameBtn = document.getElementById('changeGameBtn');
-const changeGameDropdown = document.getElementById('changeGameDropdown');
-
-changeGameBtn.addEventListener('click', () => {
-  // Toggle dropdown visibility
-  if (changeGameDropdown.style.display === 'none' || changeGameDropdown.style.display === '') {
-    // Fetch clusters from server
-    fetch('/clusters')
-      .then(res => res.json())
-      .then(clusters => {
-        // Clear existing options
-        changeGameDropdown.innerHTML = '';
-        clusters.forEach(cluster => {
-          // Create a button for each cluster
-          let btn = document.createElement('button');
-          btn.textContent = cluster;
-          btn.style.width = '100%';
-          btn.style.padding = '8px';
-          btn.style.border = 'none';
-          btn.style.background = 'none';
-          btn.style.textAlign = 'left';
-          btn.addEventListener('click', () => {
-            // If selected cluster is same as current, do nothing
-            if (cluster === currentCluster) {
-              changeGameDropdown.style.display = 'none';
-              return;
-            }
-            // Emit changeGameRequest event
-            socket.emit('changeGameRequest', { newCluster: cluster });
-            changeGameDropdown.style.display = 'none';
-          });
-          changeGameDropdown.appendChild(btn);
-        });
-        changeGameDropdown.style.display = 'block';
-      });
-  } else {
-    changeGameDropdown.style.display = 'none';
-  }
-});
-
-// Listen for gameChanged event from server to update current cluster and clear current turn UI.
 socket.on('gameChanged', (data) => {
   currentCluster = data.newCluster;
-  // Immediately clear any turn UI
   turnPrompt.style.display = 'none';
   drawCountdown.style.display = 'none';
   objectDisplayElem.style.display = 'none';
 });
 
-// Listen for canvasMessage event to display a message overlay on canvas
 socket.on('canvasMessage', (data) => {
   const canvasMessageElem = document.getElementById('canvasMessage');
   canvasMessageElem.textContent = data.message;
@@ -541,6 +483,9 @@ function drawingMove(e) {
 function stopDrawing(e) {
   if (!isMyTurn) return;
   if (isDrawing) {
+    if (currentPath.length === 1) {
+      currentPath.push(currentPath[0]); // Duplicate the point for tap
+    }
     let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
     paths.push(stroke);
     socket.emit('strokeComplete', stroke);
@@ -629,3 +574,60 @@ document.getElementById('giveUpBtn').addEventListener('click', () => {
 
 chatInput.addEventListener('focus', () => { adjustLayoutForKeyboard(true); });
 chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
+
+// --- Solo Mode: Cluster Selection Modal ---
+function showClusterSelectionModal(availableClusters, currentCluster) {
+  // Create modal overlay
+  let modal = document.createElement('div');
+  modal.id = 'clusterModal';
+  modal.style.position = 'fixed';
+  modal.style.top = '0';
+  modal.style.left = '0';
+  modal.style.width = '100%';
+  modal.style.height = '100%';
+  modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.zIndex = '200';
+
+  let modalContent = document.createElement('div');
+  modalContent.style.backgroundColor = '#fff';
+  modalContent.style.padding = '20px';
+  modalContent.style.borderRadius = '8px';
+  modalContent.style.textAlign = 'center';
+
+  let title = document.createElement('h2');
+  title.textContent = 'Select Game Cluster';
+  modalContent.appendChild(title);
+
+  let info = document.createElement('p');
+  info.textContent = 'Choose the cluster you want to play:';
+  modalContent.appendChild(info);
+
+  availableClusters.forEach(cluster => {
+    let btn = document.createElement('button');
+    btn.textContent = cluster;
+    btn.style.margin = '5px';
+    btn.addEventListener('click', () => {
+      currentCluster = cluster;
+      socket.emit('clusterChosen', cluster);
+      document.body.removeChild(modal);
+    });
+    modalContent.appendChild(btn);
+  });
+
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+}
+
+socket.on('soloMode', (data) => {
+  // Hide turn related UI elements
+  turnPrompt.style.display = 'none';
+  drawCountdown.style.display = 'none';
+  document.getElementById('giveUpBtn').style.display = 'none';
+  // Set current cluster from data
+  currentCluster = data.currentCluster;
+  // Show cluster selection modal for solo player
+  showClusterSelectionModal(data.availableClusters, currentCluster);
+});

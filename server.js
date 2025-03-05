@@ -35,10 +35,11 @@ function createLobbyState() {
     guessedCorrectly: {},
     turnTimer: null,
     currentDrawTimeLeft: 0,
-    // Set the current cluster to the first key in objects (e.g. "superhero")
+    // Set the current cluster to the first key in objects
     currentCluster: Object.keys(objects)[0],
     // To track pending game change vote (if any)
-    pendingGameChange: null
+    pendingGameChange: null,
+    currentDecisionTimeLeft: null
   };
 }
 
@@ -92,7 +93,6 @@ function getRandomObjects(n, cluster) {
 const DECISION_DURATION = 10;
 const DRAW_DURATION = 70;
 
-// Start a new turn for a given lobby
 function startNextTurn(lobbyName) {
   const state = activeLobbies[lobbyName];
   if (!state) return;
@@ -106,6 +106,12 @@ function startNextTurn(lobbyName) {
   state.canvasStrokes = [];
   state.currentObject = null;
   state.guessedCorrectly = {};
+  
+  // If only one player, enable solo mode (free drawing)
+  if (state.playerOrder.length === 1) {
+    io.to(state.playerOrder[0]).emit('soloMode', { availableClusters: Object.keys(objects), currentCluster: state.currentCluster });
+    return;
+  }
   
   // Rotate turn based on arrival order
   if (state.playerOrder.length === 0) {
@@ -123,7 +129,6 @@ function startNextTurn(lobbyName) {
     }
   }
   
-  // Send only the uppercase name (no rank info)
   let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
   io.to(lobbyName).emit('turnStarted', { 
     currentDrawer: state.currentDrawer, 
@@ -131,7 +136,6 @@ function startNextTurn(lobbyName) {
     currentDrawerName: currentDrawerName
   });
   
-  // Pick options only from the current cluster
   let options = getRandomObjects(3, state.currentCluster);
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
@@ -183,7 +187,6 @@ io.on('connection', (socket) => {
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-    // Broadcast join notification in full uppercase without colon.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
     socket.emit('init', {
       players: state.playerOrder.map(id => {
@@ -200,29 +203,12 @@ io.on('connection', (socket) => {
       let player = state.players[id];
       return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
     }));
-    if (!state.currentDrawer) {
-      state.currentDrawer = socket.id;
-      let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
-      io.to(lobbyName).emit('turnStarted', { 
-        currentDrawer: state.currentDrawer, 
-        duration: DECISION_DURATION,
-        currentDrawerName: currentDrawerName
-      });
-      const options = getRandomObjects(3, state.currentCluster);
-      io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-      let timeLeft = DECISION_DURATION;
-      state.currentDecisionTimeLeft = timeLeft;
-      state.turnTimer = setInterval(() => {
-        timeLeft--;
-        state.currentDecisionTimeLeft = timeLeft;
-        io.to(lobbyName).emit('turnCountdown', timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(state.turnTimer);
-          state.turnTimer = null;
-          io.to(state.currentDrawer).emit('turnTimeout');
-          startNextTurn(lobbyName);
-        }
-      }, 1000);
+    
+    if (state.playerOrder.length === 1) {
+      // First player in lobby: enable solo mode with cluster selection
+      io.to(socket.id).emit('soloMode', { availableClusters: Object.keys(objects), currentCluster: state.currentCluster });
+    } else if (!state.currentDrawer) {
+      startNextTurn(lobbyName);
     }
   });
   
@@ -262,7 +248,6 @@ io.on('connection', (socket) => {
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
     
-    // If a pending game change vote exists and the message is "cancel", cancel the vote.
     if (state.pendingGameChange && message.trim().toLowerCase() === "cancel") {
       clearTimeout(state.pendingGameChange.timeout);
       state.pendingGameChange = null;
@@ -270,7 +255,6 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Guess checking (only when there is an object to guess and sender is not drawing)
     if (state.currentObject && socket.id !== state.currentDrawer) {
       if (!state.guessedCorrectly[socket.id]) {
         const guess = message.trim().toLowerCase();
@@ -307,29 +291,52 @@ io.on('connection', (socket) => {
     io.to(lobbyName).emit('chatMessage', chatData);
   });
   
-  // --- New: Change Game Request ---
+  // --- Cluster selection by solo player ---
+  socket.on('clusterChosen', (newCluster) => {
+    const lobbyName = socket.lobby;
+    if (!lobbyName || !activeLobbies[lobbyName]) return;
+    const state = activeLobbies[lobbyName];
+    // Only allow immediate change if only one player is in lobby
+    if (Object.keys(state.players).length === 1) {
+      state.currentCluster = newCluster;
+      io.to(socket.id).emit('gameChanged', { newCluster });
+    }
+  });
+  
+  // --- Change Game Request ---
   socket.on('changeGameRequest', (data) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
     const newCluster = data.newCluster;
     if (!newCluster || newCluster === state.currentCluster) {
-      return; // Do nothing if same or invalid cluster.
+      return;
     }
-    // If a game change is already pending, ignore new requests.
+    if (Object.keys(state.players).length === 1) {
+      if (state.turnTimer) {
+        clearInterval(state.turnTimer);
+        state.turnTimer = null;
+      }
+      state.currentObject = null;
+      state.guessedCorrectly = {};
+      state.canvasStrokes = [];
+      io.to(lobbyName).emit('clearCanvas');
+      state.currentCluster = newCluster;
+      io.to(lobbyName).emit('gameChanged', { newCluster });
+      io.to(lobbyName).emit('canvasMessage', { message: `WELCOME TO '${newCluster.toUpperCase()}' GAME`, duration: 3000 });
+      state.pendingGameChange = null;
+      return;
+    }
     if (state.pendingGameChange) {
       socket.emit('chatMessage', { nickname: "", message: `A game change is already pending.` });
       return;
     }
     const initiatingPlayer = state.players[socket.id] ? state.players[socket.id].nickname : 'Unknown';
-    // Broadcast the vote message to all players.
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${initiatingPlayer.toUpperCase()} WANTS TO CHANGE GAME TO ${newCluster.toUpperCase()}, PRESS 'CANCEL' WITHIN 10 SEC TO CANCEL ACTION` });
-    // Set pending game change vote with a 10-sec timeout.
     state.pendingGameChange = {
       newCluster: newCluster,
       initiatedBy: initiatingPlayer,
       timeout: setTimeout(() => {
-        // Before changing game, immediately stop current turn activities.
         if (state.turnTimer) {
           clearInterval(state.turnTimer);
           state.turnTimer = null;
@@ -338,13 +345,10 @@ io.on('connection', (socket) => {
         state.guessedCorrectly = {};
         state.canvasStrokes = [];
         io.to(lobbyName).emit('clearCanvas');
-        // Change the game cluster.
         state.currentCluster = newCluster;
         io.to(lobbyName).emit('gameChanged', { newCluster });
-        // Show welcome message for 3 seconds.
         io.to(lobbyName).emit('canvasMessage', { message: `WELCOME TO '${newCluster.toUpperCase()}' GAME`, duration: 3000 });
         state.pendingGameChange = null;
-        // After 3 seconds, start a new turn with the new cluster.
         setTimeout(() => {
           startNextTurn(lobbyName);
         }, 3000);
@@ -375,7 +379,7 @@ io.on('connection', (socket) => {
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
     if (socket.id === state.currentDrawer) {
-      io.to(lobbyName).emit('undo');
+      socket.to(lobbyName).emit('undo');
     }
   });
   
