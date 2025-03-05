@@ -97,6 +97,7 @@ socket.on('lobbyError', (data) => {
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
+// drawControlsDiv now always remains visible (its inner buttons will be toggled)
 const drawControlsDiv = document.getElementById('drawControls');
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
@@ -336,13 +337,22 @@ socket.on('turnStarted', (data) => {
   } else {
     isMyTurn = false;
     turnPrompt.style.display = 'flex';
-    // For non-drawing players, show only the uppercase name and countdown.
     promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
     turnOptionsDiv.innerHTML = "";
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
   }
-  drawControlsDiv.style.display = (data.currentDrawer === socket.id) ? 'block' : 'none';
+  // Always show the change game button; toggle action buttons based on turn.
+  drawControlsDiv.style.display = 'block';
+  if (data.currentDrawer === socket.id) {
+    document.getElementById('undoBtn').style.display = 'inline-block';
+    document.getElementById('clearBtn').style.display = 'inline-block';
+    document.getElementById('giveUpBtn').style.display = 'inline-block';
+  } else {
+    document.getElementById('undoBtn').style.display = 'none';
+    document.getElementById('clearBtn').style.display = 'none';
+    document.getElementById('giveUpBtn').style.display = 'none';
+  }
 });
 
 socket.on('turnCountdown', (timeLeft) => {
@@ -396,6 +406,9 @@ socket.on('drawPhaseStarted', (data) => {
     drawCountdown.textContent = data.duration;
     dashHintDiv.textContent = "";
     drawControlsDiv.style.display = 'block';
+    document.getElementById('undoBtn').style.display = 'inline-block';
+    document.getElementById('clearBtn').style.display = 'inline-block';
+    document.getElementById('giveUpBtn').style.display = 'inline-block';
     if (currentObjectStr) {
       objectDisplayElem.style.display = 'block';
       objectDisplayElem.textContent = currentObjectStr;
@@ -411,7 +424,11 @@ socket.on('drawPhaseStarted', (data) => {
     turnPrompt.style.display = 'none';
     drawCountdown.style.display = 'block';
     drawCountdown.textContent = data.duration;
-    drawControlsDiv.style.display = 'none';
+    // Always show change game button even for non-drawers.
+    drawControlsDiv.style.display = 'block';
+    document.getElementById('undoBtn').style.display = 'none';
+    document.getElementById('clearBtn').style.display = 'none';
+    document.getElementById('giveUpBtn').style.display = 'none';
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
   }
@@ -473,9 +490,13 @@ changeGameBtn.addEventListener('click', () => {
   }
 });
 
-// Listen for gameChanged event from server to update current cluster
+// Listen for gameChanged event from server to update current cluster and clear current turn UI.
 socket.on('gameChanged', (data) => {
   currentCluster = data.newCluster;
+  // Immediately clear any turn UI
+  turnPrompt.style.display = 'none';
+  drawCountdown.style.display = 'none';
+  objectDisplayElem.style.display = 'none';
 });
 
 // Listen for canvasMessage event to display a message overlay on canvas

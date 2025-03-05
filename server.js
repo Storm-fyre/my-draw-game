@@ -329,12 +329,25 @@ io.on('connection', (socket) => {
       newCluster: newCluster,
       initiatedBy: initiatingPlayer,
       timeout: setTimeout(() => {
-        // Vote passed: change game cluster.
+        // Before changing game, immediately stop current turn activities.
+        if (state.turnTimer) {
+          clearInterval(state.turnTimer);
+          state.turnTimer = null;
+        }
+        state.currentObject = null;
+        state.guessedCorrectly = {};
+        state.canvasStrokes = [];
+        io.to(lobbyName).emit('clearCanvas');
+        // Change the game cluster.
         state.currentCluster = newCluster;
         io.to(lobbyName).emit('gameChanged', { newCluster });
-        // Send a canvas message to all players for 3 seconds.
+        // Show welcome message for 3 seconds.
         io.to(lobbyName).emit('canvasMessage', { message: `WELCOME TO '${newCluster.toUpperCase()}' GAME`, duration: 3000 });
         state.pendingGameChange = null;
+        // After 3 seconds, start a new turn with the new cluster.
+        setTimeout(() => {
+          startNextTurn(lobbyName);
+        }, 3000);
       }, 10000)
     };
   });
