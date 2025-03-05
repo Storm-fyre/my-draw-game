@@ -36,12 +36,19 @@
       <!-- Dash hint for non-drawing players -->
       <div id="dashHint"></div>
       <canvas id="drawCanvas"></canvas>
+      <!-- Canvas message overlay -->
+      <div id="canvasMessage" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); font-size:24px; color:#000; display:none; background:rgba(255,255,255,0.7); padding:10px; border-radius:5px;"></div>
       <!-- Status bar inside canvas container -->
       <div id="statusBar">
         <div id="drawControls">
           <button id="undoBtn">Undo</button>
           <button id="clearBtn">Clear</button>
           <button id="giveUpBtn">Give Up</button>
+          <!-- New Change Game dropdown -->
+          <div class="dropdown" style="display: inline-block; position: relative;">
+            <button id="changeGameBtn">Change Game &#9662;</button>
+            <div id="changeGameDropdown" class="dropdown-content" style="display:none; position: absolute; right: 0; background-color: #f9f9f9; min-width: 120px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 20;"></div>
+          </div>
         </div>
         <div id="objectDisplay"></div>
         <div id="drawCountdown" class="drawCountdown"></div>

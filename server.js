@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const objects = require('./objects.json');       // drawing objects list
+const objects = require('./objects.json');       // drawing objects clusters
 const lobbyInfo = require('./lobbies.json');       // available lobbies and passcodes
 
 const app = express();
@@ -14,6 +14,11 @@ app.use(express.static('public'));
 
 app.get('/lobbies', (req, res) => {
   res.json(lobbyInfo);
+});
+
+// New endpoint to fetch cluster names
+app.get('/clusters', (req, res) => {
+  res.json(Object.keys(objects));
 });
 
 // Global object for active lobby game states (keyed by lobby name)
@@ -29,8 +34,11 @@ function createLobbyState() {
     currentObject: null,
     guessedCorrectly: {},
     turnTimer: null,
-    currentDrawTimeLeft: 0
-    // We'll add currentDecisionTimeLeft dynamically when needed
+    currentDrawTimeLeft: 0,
+    // Set the current cluster to the first key in objects (e.g. "superhero")
+    currentCluster: Object.keys(objects)[0],
+    // To track pending game change vote (if any)
+    pendingGameChange: null
   };
 }
 
@@ -70,9 +78,10 @@ function similarity(str1, str2) {
   return ((1 - distance / maxLen) * 100);
 }
 
-// Randomly select n objects from the list (without duplicates)
-function getRandomObjects(n) {
-  let shuffled = objects.slice();
+// Randomly select n objects from the current cluster (without duplicates)
+function getRandomObjects(n, cluster) {
+  let options = objects[cluster] || [];
+  let shuffled = options.slice();
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -122,7 +131,8 @@ function startNextTurn(lobbyName) {
     currentDrawerName: currentDrawerName
   });
   
-  const options = getRandomObjects(3);
+  // Pick options only from the current cluster
+  let options = getRandomObjects(3, state.currentCluster);
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
   
   let timeLeft = DECISION_DURATION;
@@ -198,7 +208,7 @@ io.on('connection', (socket) => {
         duration: DECISION_DURATION,
         currentDrawerName: currentDrawerName
       });
-      const options = getRandomObjects(3);
+      const options = getRandomObjects(3, state.currentCluster);
       io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
       let timeLeft = DECISION_DURATION;
       state.currentDecisionTimeLeft = timeLeft;
@@ -246,11 +256,21 @@ io.on('connection', (socket) => {
     }
   });
   
-  // --- Chat (and guessing) ---
+  // --- Chat (and guessing / game change cancellation) ---
   socket.on('chatMessage', (message) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
+    
+    // If a pending game change vote exists and the message is "cancel", cancel the vote.
+    if (state.pendingGameChange && message.trim().toLowerCase() === "cancel") {
+      clearTimeout(state.pendingGameChange.timeout);
+      state.pendingGameChange = null;
+      io.to(lobbyName).emit('chatMessage', { nickname: "", message: `GAME CHANGE CANCELED` });
+      return;
+    }
+    
+    // Guess checking (only when there is an object to guess and sender is not drawing)
     if (state.currentObject && socket.id !== state.currentDrawer) {
       if (!state.guessedCorrectly[socket.id]) {
         const guess = message.trim().toLowerCase();
@@ -285,6 +305,38 @@ io.on('connection', (socket) => {
       state.chatMessages.shift();
     }
     io.to(lobbyName).emit('chatMessage', chatData);
+  });
+  
+  // --- New: Change Game Request ---
+  socket.on('changeGameRequest', (data) => {
+    const lobbyName = socket.lobby;
+    if (!lobbyName || !activeLobbies[lobbyName]) return;
+    const state = activeLobbies[lobbyName];
+    const newCluster = data.newCluster;
+    if (!newCluster || newCluster === state.currentCluster) {
+      return; // Do nothing if same or invalid cluster.
+    }
+    // If a game change is already pending, ignore new requests.
+    if (state.pendingGameChange) {
+      socket.emit('chatMessage', { nickname: "", message: `A game change is already pending.` });
+      return;
+    }
+    const initiatingPlayer = state.players[socket.id] ? state.players[socket.id].nickname : 'Unknown';
+    // Broadcast the vote message to all players.
+    io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${initiatingPlayer.toUpperCase()} WANTS TO CHANGE GAME TO ${newCluster.toUpperCase()}, PRESS 'CANCEL' WITHIN 10 SEC TO CANCEL ACTION` });
+    // Set pending game change vote with a 10-sec timeout.
+    state.pendingGameChange = {
+      newCluster: newCluster,
+      initiatedBy: initiatingPlayer,
+      timeout: setTimeout(() => {
+        // Vote passed: change game cluster.
+        state.currentCluster = newCluster;
+        io.to(lobbyName).emit('gameChanged', { newCluster });
+        // Send a canvas message to all players for 3 seconds.
+        io.to(lobbyName).emit('canvasMessage', { message: `WELCOME TO '${newCluster.toUpperCase()}' GAME`, duration: 3000 });
+        state.pendingGameChange = null;
+      }, 10000)
+    };
   });
   
   // --- Drawing events ---

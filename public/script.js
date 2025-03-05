@@ -25,6 +25,9 @@ let isKeyboardActive = false;
 // Timer for clearing object display after drawing phase (70 sec)
 let drawPhaseObjectTimer = null;
 
+// Current game cluster (default from server is "superhero")
+let currentCluster = "superhero";
+
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
 const nicknameInput = document.getElementById('nicknameInput');
@@ -427,6 +430,62 @@ socket.on('drawPhaseTimeout', () => {
   objectDisplayElem.style.display = 'none';
   objectDisplayElem.textContent = '';
   if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
+});
+
+// --- Change Game Dropdown functionality ---
+const changeGameBtn = document.getElementById('changeGameBtn');
+const changeGameDropdown = document.getElementById('changeGameDropdown');
+
+changeGameBtn.addEventListener('click', () => {
+  // Toggle dropdown visibility
+  if (changeGameDropdown.style.display === 'none' || changeGameDropdown.style.display === '') {
+    // Fetch clusters from server
+    fetch('/clusters')
+      .then(res => res.json())
+      .then(clusters => {
+        // Clear existing options
+        changeGameDropdown.innerHTML = '';
+        clusters.forEach(cluster => {
+          // Create a button for each cluster
+          let btn = document.createElement('button');
+          btn.textContent = cluster;
+          btn.style.width = '100%';
+          btn.style.padding = '8px';
+          btn.style.border = 'none';
+          btn.style.background = 'none';
+          btn.style.textAlign = 'left';
+          btn.addEventListener('click', () => {
+            // If selected cluster is same as current, do nothing
+            if (cluster === currentCluster) {
+              changeGameDropdown.style.display = 'none';
+              return;
+            }
+            // Emit changeGameRequest event
+            socket.emit('changeGameRequest', { newCluster: cluster });
+            changeGameDropdown.style.display = 'none';
+          });
+          changeGameDropdown.appendChild(btn);
+        });
+        changeGameDropdown.style.display = 'block';
+      });
+  } else {
+    changeGameDropdown.style.display = 'none';
+  }
+});
+
+// Listen for gameChanged event from server to update current cluster
+socket.on('gameChanged', (data) => {
+  currentCluster = data.newCluster;
+});
+
+// Listen for canvasMessage event to display a message overlay on canvas
+socket.on('canvasMessage', (data) => {
+  const canvasMessageElem = document.getElementById('canvasMessage');
+  canvasMessageElem.textContent = data.message;
+  canvasMessageElem.style.display = 'block';
+  setTimeout(() => {
+    canvasMessageElem.style.display = 'none';
+  }, data.duration);
 });
 
 function getNormalizedPos(e) {
