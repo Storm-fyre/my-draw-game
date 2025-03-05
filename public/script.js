@@ -235,7 +235,7 @@ function updatePlayerList(playersArr) {
 // --- Dash hint update function ---
 // For one-word objects, the dash hints are constructed as before.
 // For two-word objects, the two parts are joined with a gap of three non-breaking spaces
-// styled with a font size of 13px (midway between 12px and 14px).
+// styled with a font size of 17px .
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -272,7 +272,7 @@ function updateDashHint() {
     hintWords.push(disp2.trim());
   }
   if (hintWords.length === 2) {
-    dashHintDiv.innerHTML = hintWords[0] + '<span style="font-size:13px;">&nbsp;&nbsp;&nbsp;</span>' + hintWords[1];
+    dashHintDiv.innerHTML = hintWords[0] + '<span style="font-size:17px;">&nbsp;&nbsp;&nbsp;</span>' + hintWords[1];
   } else {
     dashHintDiv.textContent = hintWords.join(" ");
   }
