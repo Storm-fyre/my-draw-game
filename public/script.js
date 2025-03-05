@@ -3,28 +3,21 @@ const socket = io();
 let nickname = "";
 let isDrawing = false;
 let currentPath = [];
-let paths = []; // stored complete strokes
+let paths = []; // stored complete strokes (each with a "by" property)
 let currentColor = "#000000";
 let currentThickness = 2;
-// In normal mode, isMyTurn indicates turn; in Free Canvas mode, all can draw.
+// In normal game mode, isMyTurn determines if the player can draw.
+// In Free Canvas mode (or if solo), all players can draw.
 let isMyTurn = false;
-
-// For non-drawing players: store current remote stroke
 let currentRemoteStroke = null;
-
-// For dash hint (only used in normal mode)
 let currentObjectStr = null;
 let currentDrawTime = null;
-
-// Flags for view and keyboard
 let isChatView = true;
 let isKeyboardActive = false;
-
-// Timer for clearing object display
 let drawPhaseObjectTimer = null;
-
-// Current game mode (either a cluster name or "Free Canvas")
-let currentMode = "superhero";
+let currentMode = "superhero"; // actual mode from server
+let playerCount = 0;
+let mySocketId = "";
 
 // --- Modal Elements ---
 const nicknameModal = document.getElementById('nicknameModal');
@@ -38,7 +31,7 @@ const selectedLobbyNameElem = document.getElementById('selectedLobbyName');
 const lobbyPasscodeInput = document.getElementById('lobbyPasscodeInput');
 const joinLobbyBtn = document.getElementById('joinLobbyBtn');
 
-// --- After entering nickname ---
+// --- After entering nickname, show lobby selection ---
 joinBtn.addEventListener('click', () => {
   const name = nicknameInput.value.trim();
   if(name) {
@@ -95,8 +88,7 @@ socket.on('lobbyError', (data) => {
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 const dashHintDiv = document.getElementById('dashHint');
-// drawControlsDiv always remains visible so that Change Game button stays in place.
-const drawControlsDiv = document.getElementById('drawControls');
+const drawControlsDiv = document.getElementById('drawControls'); // always visible to keep Change Game button in place
 const objectDisplayElem = document.getElementById('objectDisplay');
 const drawCountdown = document.getElementById('drawCountdown');
 
@@ -106,7 +98,18 @@ function redrawStrokes() {
   if (currentRemoteStroke) drawStroke(currentRemoteStroke, false);
 }
 
-// Adjust layout for keyboard activity.
+// --- Undo helper ---
+// Removes the last stroke in "paths" drawn by the given user
+function undoLastStrokeFor(userId) {
+  for (let i = paths.length - 1; i >= 0; i--) {
+    if (paths[i].by === userId) {
+      paths.splice(i, 1);
+      break;
+    }
+  }
+  redrawStrokes();
+}
+
 function adjustLayoutForKeyboard(active) {
   const gameContainer = document.getElementById('gameContainer');
   const canvasContainer = document.getElementById('canvasContainer');
@@ -198,7 +201,11 @@ chatInput.addEventListener('blur', () => { adjustLayoutForKeyboard(false); });
 
 function addChatMessage(data) {
   const p = document.createElement('p');
-  p.textContent = data.nickname && data.nickname.trim() !== "" ? `${data.nickname}: ${data.message}` : data.message;
+  if (data.nickname && data.nickname.trim() !== "") {
+    p.textContent = `${data.nickname}: ${data.message}`;
+  } else {
+    p.textContent = data.message;
+  }
   if (chatBox.firstChild) {
     chatBox.insertBefore(p, chatBox.firstChild);
   } else {
@@ -217,17 +224,15 @@ function updatePlayerList(playersArr) {
     pElem.textContent = `${p.rank}. ${p.nickname} (${p.score})`;
     playerBox.appendChild(pElem);
   });
-  // If only one player, hide Give Up and Change Game buttons.
-  if (playersArr.length === 1) {
+  playerCount = playersArr.length;
+  // If only one player, override mode to Free Canvas and hide "Give Up" button.
+  if (playerCount === 1) {
+    currentMode = "Free Canvas";
+    isMyTurn = true;
     document.getElementById('giveUpBtn').style.display = 'none';
-    document.getElementById('changeGameBtn').style.display = 'none';
-  } else {
-    document.getElementById('changeGameBtn').style.display = 'inline-block';
-    // The visibility of Give Up will be set in turn events.
   }
 }
 
-// --- Dash hint update (normal mode only) ---
 function updateDashHint() {
   if (isMyTurn || !currentObjectStr) {
     dashHintDiv.textContent = "";
@@ -274,15 +279,12 @@ socket.on('init', (data) => {
     redrawStrokes();
   }
   currentMode = data.mode;
-  // In Free Canvas mode, allow drawing for everyone and hide turn UI.
+  mySocketId = data.yourId;
+  // If mode is Free Canvas, allow drawing immediately.
   if (currentMode === "Free Canvas") {
     isMyTurn = true;
+    document.getElementById('giveUpBtn').style.display = 'none';
     turnPrompt.style.display = 'none';
-  } else if (data.decisionTimeLeft !== null && data.currentDrawer) {
-    turnPrompt.style.display = 'flex';
-    promptText.textContent = `${data.currentDrawerName} IS CHOOSING A WORD...`;
-    turnOptionsDiv.innerHTML = "";
-    countdownDisplay.textContent = data.decisionTimeLeft;
   }
 });
 
@@ -310,10 +312,7 @@ socket.on('clearCanvas', () => {
   currentRemoteStroke = null;
 });
 
-// In response to an undo event from server, remove last stroke locally.
-socket.on('undo', () => { undoLastStroke(); });
-
-// Turn and object selection events (ignored in Free Canvas)
+// Turn-based events (ignored in Free Canvas mode)
 const turnPrompt = document.getElementById('turnPrompt');
 const promptText = document.getElementById('promptText');
 const turnOptionsDiv = document.getElementById('turnOptions');
@@ -343,7 +342,7 @@ socket.on('turnStarted', (data) => {
     objectDisplayElem.style.display = 'none';
     objectDisplayElem.textContent = '';
   }
-  // Always show Change Game button.
+  // Always show Change Game button. Toggle other buttons based on turn.
   if (data.currentDrawer === socket.id) {
     document.getElementById('undoBtn').style.display = 'inline-block';
     document.getElementById('clearBtn').style.display = 'inline-block';
@@ -448,6 +447,12 @@ socket.on('drawPhaseTimeout', () => {
   if (drawPhaseObjectTimer) clearTimeout(drawPhaseObjectTimer);
 });
 
+// --- Undo event handling ---
+socket.on('undo', (data) => {
+  // Remove the last stroke drawn by the user with id data.by
+  undoLastStrokeFor(data.by);
+});
+
 // --- Change Game Dropdown functionality ---
 const changeGameBtn = document.getElementById('changeGameBtn');
 const changeGameDropdown = document.getElementById('changeGameDropdown');
@@ -485,11 +490,9 @@ changeGameBtn.addEventListener('click', () => {
 
 socket.on('gameChanged', (data) => {
   currentMode = data.newCluster;
-  // Immediately clear turn UI.
   turnPrompt.style.display = 'none';
   drawCountdown.style.display = 'none';
   objectDisplayElem.style.display = 'none';
-  // In Free Canvas mode, allow drawing for all and hide "Give Up" button.
   if (currentMode === "Free Canvas") {
     isMyTurn = true;
     document.getElementById('giveUpBtn').style.display = 'none';
@@ -518,6 +521,7 @@ function getNormalizedPos(e) {
   return { x: x / canvas.width, y: y / canvas.height };
 }
 
+// --- Drawing functions ---
 function startDrawing(e) {
   if (currentMode !== "Free Canvas" && !isMyTurn) return;
   isDrawing = true;
@@ -531,13 +535,13 @@ function drawingMove(e) {
   const pos = getNormalizedPos(e);
   currentPath.push(pos);
   drawStroke({ path: currentPath, color: currentColor, thickness: currentThickness }, true);
-  socket.emit('drawing', { path: currentPath, color: currentColor, thickness: currentThickness });
+  socket.emit('drawing', { path: currentPath, color: currentColor, thickness: currentThickness, by: mySocketId });
 }
 
 function stopDrawing(e) {
   if (currentMode !== "Free Canvas" && !isMyTurn) return;
   if (isDrawing) {
-    let stroke = { path: currentPath, color: currentColor, thickness: currentThickness };
+    let stroke = { path: currentPath, color: currentColor, thickness: currentThickness, by: mySocketId };
     paths.push(stroke);
     socket.emit('strokeComplete', stroke);
   }
@@ -573,11 +577,6 @@ function drawStroke(data, emitLocal) {
   let lastPoint = data.path[data.path.length - 1];
   ctx.lineTo(lastPoint.x * canvas.width, lastPoint.y * canvas.height);
   ctx.stroke();
-}
-
-function undoLastStroke() {
-  paths.pop();
-  redrawStrokes();
 }
 
 const thicknessButtons = document.querySelectorAll('.thickness');

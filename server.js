@@ -24,7 +24,6 @@ app.get('/clusters', (req, res) => {
 // Global object for active lobby game states (keyed by lobby name)
 let activeLobbies = {};
 
-// Updated: include defaultCluster property. This remains the default (first cluster) for multi‑player.
 function createLobbyState() {
   return {
     players: {},        // socket.id -> { nickname, score }
@@ -36,9 +35,9 @@ function createLobbyState() {
     guessedCorrectly: {},
     turnTimer: null,
     currentDrawTimeLeft: 0,
-    defaultCluster: Object.keys(objects)[0],
-    // Initially, we start with the default cluster. Later, if only one player remains, we'll switch to "Free Canvas".
+    // Set the current cluster to the first key in objects (e.g. "superhero")
     currentCluster: Object.keys(objects)[0],
+    // To track pending game change vote (if any)
     pendingGameChange: null
   };
 }
@@ -93,22 +92,22 @@ function getRandomObjects(n, cluster) {
 const DECISION_DURATION = 10;
 const DRAW_DURATION = 70;
 
-// Only used in turn‑based (normal game) mode.
+// Start a new turn for a given lobby (only for normal game mode)
 function startNextTurn(lobbyName) {
   const state = activeLobbies[lobbyName];
   if (!state) return;
-
+  
   if (state.turnTimer) {
     clearInterval(state.turnTimer);
     state.turnTimer = null;
   }
-  // Clear canvas for new turn.
+  // Clear canvas state for the lobby
   io.to(lobbyName).emit('clearCanvas');
   state.canvasStrokes = [];
   state.currentObject = null;
   state.guessedCorrectly = {};
-
-  // Rotate turn based on join order.
+  
+  // Rotate turn based on arrival order
   if (state.playerOrder.length === 0) {
     state.currentDrawer = null;
     return;
@@ -123,17 +122,17 @@ function startNextTurn(lobbyName) {
       state.currentDrawer = state.playerOrder[currentIndex + 1];
     }
   }
-
+  
   let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
-  io.to(lobbyName).emit('turnStarted', {
-    currentDrawer: state.currentDrawer,
+  io.to(lobbyName).emit('turnStarted', { 
+    currentDrawer: state.currentDrawer, 
     duration: DECISION_DURATION,
     currentDrawerName: currentDrawerName
   });
-
+  
   let options = getRandomObjects(3, state.currentCluster);
   io.to(state.currentDrawer).emit('objectSelection', { options, duration: DECISION_DURATION });
-
+  
   let timeLeft = DECISION_DURATION;
   state.currentDecisionTimeLeft = timeLeft;
   state.turnTimer = setInterval(() => {
@@ -151,7 +150,7 @@ function startNextTurn(lobbyName) {
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
-
+  
   // --- Lobby joining ---
   socket.on('joinLobby', (data) => {
     const lobbyEntry = lobbyInfo.find(lobby => {
@@ -174,56 +173,43 @@ io.on('connection', (socket) => {
     }
     socket.emit('lobbyJoined', { lobby: data.lobbyName });
   });
-
-  // --- Set Nickname and update mode based on player count ---
+  
+  // --- After joining a lobby, set nickname ---
   socket.on('setNickname', (nickname) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
     state.players[socket.id] = { nickname, score: 0 };
     state.playerOrder.push(socket.id);
-
     io.to(lobbyName).emit('chatMessage', { nickname: "", message: `${nickname.toUpperCase()} JOINED` });
-
-    const playerCount = Object.keys(state.players).length;
-    if (playerCount === 1) {
-      // Single player: force Free Canvas mode.
-      state.currentCluster = "Free Canvas";
-      state.currentDrawer = null;
-      socket.emit('init', {
-        players: state.playerOrder.map(id => {
-          let player = state.players[id];
-          return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-        }),
-        canvasStrokes: state.canvasStrokes,
-        mode: state.currentCluster,
-        decisionTimeLeft: null,
-        currentDrawer: null,
-        currentDrawerName: null
-      });
-    } else {
-      // More than one player: if previously in Free Canvas, switch to default.
-      if (state.currentCluster === "Free Canvas") {
-        state.currentCluster = state.defaultCluster;
-        io.to(lobbyName).emit('gameChanged', { newCluster: state.currentCluster });
-      }
-      socket.emit('init', {
-        players: state.playerOrder.map(id => {
-          let player = state.players[id];
-          return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-        }),
-        canvasStrokes: state.canvasStrokes,
-        mode: state.currentCluster,
-        decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
-        currentDrawer: state.currentDrawer,
-        currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname.toUpperCase() : null
-      });
-      // If in normal mode and no turn is active, start the turn.
-      if (state.currentCluster !== "Free Canvas" && !state.currentDrawer) {
+    
+    // Determine mode to send: if only one player, use Free Canvas mode
+    let modeToSend = state.playerOrder.length === 1 ? "Free Canvas" : state.currentCluster;
+    
+    socket.emit('init', {
+      players: state.playerOrder.map(id => {
+        let player = state.players[id];
+        return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+      }),
+      canvasStrokes: state.canvasStrokes,
+      mode: modeToSend,
+      decisionTimeLeft: (!state.currentObject && state.currentDecisionTimeLeft !== undefined) ? state.currentDecisionTimeLeft : null,
+      currentDrawer: state.currentDrawer || null,
+      currentDrawerName: state.currentDrawer ? state.players[state.currentDrawer].nickname.toUpperCase() : null,
+      yourId: socket.id
+    });
+    io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
+      let player = state.players[id];
+      return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
+    }));
+    
+    // Only start turn-based game if more than one player and mode is not Free Canvas.
+    if (state.playerOrder.length > 1 && state.currentCluster !== "Free Canvas") {
+      if (!state.currentDrawer) {
         state.currentDrawer = socket.id;
         let currentDrawerName = state.players[state.currentDrawer].nickname.toUpperCase();
-        io.to(lobbyName).emit('turnStarted', {
-          currentDrawer: state.currentDrawer,
+        io.to(lobbyName).emit('turnStarted', { 
+          currentDrawer: state.currentDrawer, 
           duration: DECISION_DURATION,
           currentDrawerName: currentDrawerName
         });
@@ -244,19 +230,15 @@ io.on('connection', (socket) => {
         }, 1000);
       }
     }
-    io.to(lobbyName).emit('updatePlayers', state.playerOrder.map(id => {
-      let player = state.players[id];
-      return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
-    }));
+    // If only one player, no turn-based actions are started.
   });
-
-  // --- Object selection (only in normal mode) ---
+  
+  // --- Object selection ---
   socket.on('objectChosen', (objectChosen) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (state.currentCluster === "Free Canvas") return; // ignore in free canvas
-
+    if(state.currentCluster === "Free Canvas") return; // ignore in free canvas mode
     if (socket.id === state.currentDrawer && !state.currentObject) {
       if (state.turnTimer) {
         clearInterval(state.turnTimer);
@@ -281,22 +263,20 @@ io.on('connection', (socket) => {
       }, 1000);
     }
   });
-
+  
   // --- Chat (guessing and game change cancellation) ---
   socket.on('chatMessage', (message) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-
-    // Cancel game change if message is "cancel"
+    
     if (state.pendingGameChange && message.trim().toLowerCase() === "cancel") {
       clearTimeout(state.pendingGameChange.timeout);
       state.pendingGameChange = null;
       io.to(lobbyName).emit('chatMessage', { nickname: "", message: `GAME CHANGE CANCELED` });
       return;
     }
-
-    // Guess checking in normal mode.
+    
     if (state.currentObject && socket.id !== state.currentDrawer) {
       if (!state.guessedCorrectly[socket.id]) {
         const guess = message.trim().toLowerCase();
@@ -324,22 +304,24 @@ io.on('connection', (socket) => {
         }
       }
     }
-    const senderName = state.players[socket.id] ? state.players[socket.id].nickname : 'Unknown';
-    const chatData = { nickname: senderName, message };
+    const nickname = state.players[socket.id] ? state.players[socket.id].nickname : 'Unknown';
+    const chatData = { nickname, message };
     state.chatMessages.push(chatData);
     if (state.chatMessages.length > 15) {
       state.chatMessages.shift();
     }
     io.to(lobbyName).emit('chatMessage', chatData);
   });
-
-  // --- New: Change Game Request ---
+  
+  // --- Change Game Request ---
   socket.on('changeGameRequest', (data) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
     const newCluster = data.newCluster;
-    if (!newCluster || newCluster === state.currentCluster) return;
+    if (!newCluster || newCluster === state.currentCluster) {
+      return;
+    }
     if (state.pendingGameChange) {
       socket.emit('chatMessage', { nickname: "", message: `A game change is already pending.` });
       return;
@@ -359,10 +341,6 @@ io.on('connection', (socket) => {
         state.canvasStrokes = [];
         io.to(lobbyName).emit('clearCanvas');
         state.currentCluster = newCluster;
-        // Also update the defaultCluster if the new mode isn’t Free Canvas.
-        if (newCluster !== "Free Canvas") {
-          state.defaultCluster = newCluster;
-        }
         io.to(lobbyName).emit('gameChanged', { newCluster });
         io.to(lobbyName).emit('canvasMessage', { message: `WELCOME TO '${newCluster.toUpperCase()}' GAME`, duration: 3000 });
         state.pendingGameChange = null;
@@ -374,7 +352,7 @@ io.on('connection', (socket) => {
       }, 10000)
     };
   });
-
+  
   // --- Drawing events ---
   socket.on('drawing', (data) => {
     const lobbyName = socket.lobby;
@@ -388,7 +366,7 @@ io.on('connection', (socket) => {
       }
     }
   });
-
+  
   socket.on('strokeComplete', (data) => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
@@ -396,18 +374,22 @@ io.on('connection', (socket) => {
     state.canvasStrokes.push(data);
     socket.to(lobbyName).emit('strokeComplete', data);
   });
-
-  // --- Undo event (fix) ---
+  
+  // --- Undo ---
   socket.on('undo', () => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
     const state = activeLobbies[lobbyName];
-    if (state.canvasStrokes.length > 0) {
-      state.canvasStrokes.pop();
-      io.to(lobbyName).emit('undo');
+    if (state.currentCluster === "Free Canvas") {
+      io.to(lobbyName).emit('undo', { by: socket.id });
+    } else {
+      if (socket.id === state.currentDrawer) {
+        io.to(lobbyName).emit('undo', { by: socket.id });
+      }
     }
   });
-
+  
+  // --- Clear ---
   socket.on('clear', () => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
@@ -415,8 +397,8 @@ io.on('connection', (socket) => {
     io.to(lobbyName).emit('clearCanvas');
     state.canvasStrokes = [];
   });
-
-  // "Give Up" is only applicable in turn‑based mode.
+  
+  // --- Give Up (only in turn-based mode) ---
   socket.on('giveUp', () => {
     const lobbyName = socket.lobby;
     if (!lobbyName || !activeLobbies[lobbyName]) return;
@@ -432,7 +414,7 @@ io.on('connection', (socket) => {
       startNextTurn(lobbyName);
     }
   });
-
+  
   socket.on('disconnect', () => {
     const lobbyName = socket.lobby;
     if (lobbyName && activeLobbies[lobbyName]) {
@@ -447,25 +429,11 @@ io.on('connection', (socket) => {
         let player = state.players[id];
         return { nickname: player.nickname, score: player.score, rank: state.playerOrder.indexOf(id) + 1 };
       }));
-      // Check player count to adjust mode.
-      const count = Object.keys(state.players).length;
-      if (count === 1) {
-        state.currentCluster = "Free Canvas";
-        if (state.turnTimer) {
-          clearInterval(state.turnTimer);
-          state.turnTimer = null;
-        }
-        io.to(lobbyName).emit('gameChanged', { newCluster: "Free Canvas" });
-      } else if (count === 0) {
-        state.defaultCluster = Object.keys(objects)[0];
-        state.currentCluster = state.defaultCluster;
-      } else {
-        // If more than one, and mode was Free Canvas, switch to default.
-        if (state.currentCluster === "Free Canvas") {
-          state.currentCluster = state.defaultCluster;
-          io.to(lobbyName).emit('gameChanged', { newCluster: state.currentCluster });
-          startNextTurn(lobbyName);
-        }
+      if (socket.id === state.currentDrawer) {
+        startNextTurn(lobbyName);
+      }
+      if (Object.keys(state.players).length === 0) {
+        state.canvasStrokes = [];
       }
     }
     console.log(`User disconnected: ${socket.id}`);
